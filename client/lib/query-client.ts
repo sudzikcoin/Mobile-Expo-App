@@ -1,32 +1,26 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 /**
- * Gets the base URL for the Express API server (e.g., "http://localhost:5000")
+ * The PingPoint backend API URL
+ * This is the real backend server that handles driver load data
+ */
+const PINGPOINT_API_URL = "https://6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev";
+
+/**
+ * Gets the base URL for the Express API server
  * @returns {string} The API base URL
  */
 export function getApiUrl(): string {
-  const domain = process.env.EXPO_PUBLIC_DOMAIN;
-
-  if (!domain) {
-    console.warn("[API] EXPO_PUBLIC_DOMAIN not set, using localhost:5000");
-    return "http://localhost:5000";
+  // First check for explicit API URL override
+  const apiUrlOverride = process.env.EXPO_PUBLIC_API_URL;
+  if (apiUrlOverride) {
+    console.log("[API] Using API URL from EXPO_PUBLIC_API_URL:", apiUrlOverride);
+    return apiUrlOverride;
   }
 
-  // EXPO_PUBLIC_DOMAIN is set as "domain:5000" - keep the port for external access
-  // On Replit, external port 5000 routes to the backend server
-  let apiUrl: string;
-  
-  if (domain.includes(":")) {
-    // Port is included (e.g., "domain:5000")
-    apiUrl = `https://${domain}`;
-  } else {
-    // No port, add default backend port
-    apiUrl = `https://${domain}:5000`;
-  }
-  
-  console.log("[API] Using API URL:", apiUrl);
-  
-  return apiUrl;
+  // Use the PingPoint backend URL
+  console.log("[API] Using PingPoint API URL:", PINGPOINT_API_URL);
+  return PINGPOINT_API_URL;
 }
 
 async function throwIfResNotOk(res: Response) {
