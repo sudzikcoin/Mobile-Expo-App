@@ -1,0 +1,85 @@
+```
+Create a new Expo (React Native) mobile application for truck drivers called "PingPoint Driver".
+
+DESIGN & THEME:
+- Use the exact color scheme from the reference: dark background (#0a0a1f), cyan accent (#00d9ff), yellow accent (#ffd700), purple/magenta accents
+- Support two themes: "Arcade 90s" (cyberpunk neon style) and "Premium" (clean dark theme)
+- Theme toggle in Settings
+- Retro-futuristic UI with neon glows, rounded buttons, card-based layout
+
+MAIN SCREEN (Dashboard):
+1. Header:
+   - Left: "Balance: 70" in cyan rounded pill
+   - Center: "PINGPOINT DRIVER" text with cyan subtitle
+   - Right top: "Arcade 90s" / "Premium" badge + Hamburger menu icon (☰)
+
+2. Reward Animation:
+   - Large cyan button "+20 PINGPOINTS" (shown when driver completes actions)
+   - Animate on points award
+
+3. Load Card:
+   - "LOAD #172703" in yellow text
+   - Status badge (PLANNED / IN TRANSIT / DELIVERED) in cyan border
+   - FROM → TO cities display (Evansville → CARLSBAD)
+   - Large yellow button "Enable Location Sharing" (toggles GPS tracking)
+
+4. Stops Section:
+   - Title "STOPS" in gray uppercase
+   - Each stop as a card:
+     * Number badge (1, 2) or checkmark if completed
+     * Type badge (PICKUP / DELIVERY)
+     * Company name (Windstream Supply)
+     * City, State (Evansville, IN)
+     * Full address (14616 Foundation Ave)
+     * Date/time (Jan 10, 21:53)
+     * Action button: "Arrive" (yellow) or "Depart" (yellow) based on status
+   - Completed stops: greyed out with checkmark
+   - Current stop: highlighted with cyan glow
+
+HAMBURGER MENU (slide from right):
+- History: list of completed loads
+- Logs: detailed stop log/journal with all timestamps
+- Settings: theme toggle, other settings placeholder
+
+FUNCTIONALITY:
+1. Deep linking: accept driver token via URL (pingpoint://driver/TOKEN or ?token=TOKEN)
+2. Store token locally using AsyncStorage
+3. GPS tracking:
+   - Request location permissions (foreground + background)
+   - Send location every 60 seconds to /api/driver/:token/ping
+   - Show tracking status indicator
+4. API endpoints:
+   - GET /api/driver/:token - fetch load data
+   - POST /api/driver/:token/ping - send GPS coordinates
+   - POST /api/driver/:token/stops/:stopId/arrive - mark arrival
+   - POST /api/driver/:token/stops/:stopId/depart - mark departure
+5. Real-time updates: refresh load data after each action
+6. Reward system: show animation when points awarded, update balance
+
+TECHNICAL STACK:
+- Expo SDK 52+
+- React Navigation (Stack + Drawer for menu)
+- expo-location for GPS
+- AsyncStorage for token persistence
+- Expo deep linking
+- Animated API for reward animations
+
+API BASE URL: Use environment variable or default to https://your-backend.com
+
+FILE STRUCTURE:
+- app/_layout.tsx - root layout with navigation
+- app/index.tsx - main dashboard screen
+- app/history.tsx - load history
+- app/logs.tsx - stop logs
+- app/settings.tsx - settings screen
+- components/LoadCard.tsx
+- components/StopCard.tsx
+- components/RewardAnimation.tsx
+- components/DrawerMenu.tsx
+- lib/api.ts - API client
+- lib/storage.ts - AsyncStorage wrapper
+- lib/location.ts - GPS tracking logic
+- lib/theme.ts - theme colors and styles
+
+Start with basic navigation structure, then implement main dashboard with mock data, then connect real API.
+```
