@@ -49,11 +49,18 @@ export default function WelcomeScreen({ isLoading }: WelcomeScreenProps) {
             </>
           ) : (
             <>
-              <Feather name="smartphone" size={32} color={PingPointColors.textSecondary} />
-              <ThemedText style={styles.message}>Waiting for invite link...</ThemedText>
+              <Feather name="truck" size={40} color={PingPointColors.cyan} />
+              <ThemedText style={styles.message}>Ready to Roll</ThemedText>
               <ThemedText style={styles.hint}>
-                Open the driver link sent by your dispatcher to get started.
+                Click the driver link from your dispatcher to load your assignment and start tracking.
               </ThemedText>
+              
+              <View style={styles.linkExample}>
+                <Feather name="link-2" size={14} color={PingPointColors.textMuted} />
+                <ThemedText style={styles.linkExampleText}>
+                  Link format: /driver/drv_xxxxx
+                </ThemedText>
+              </View>
 
               <Pressable
                 onPress={handleDemoLogin}
@@ -134,6 +141,21 @@ const styles = StyleSheet.create({
     color: PingPointColors.textMuted,
     textAlign: "center",
     marginTop: Spacing.sm,
+  },
+  linkExample: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    marginTop: Spacing.md,
+  },
+  linkExampleText: {
+    ...Typography.caption,
+    color: PingPointColors.textMuted,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
   demoButton: {
     flexDirection: "row",

@@ -44,24 +44,43 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
   const parseTokenFromUrl = (url: string): string | null => {
     try {
-      const parsed = Linking.parse(url);
+      console.log("[DeepLink] Parsing URL:", url);
       
-      if (parsed.path?.startsWith("driver/")) {
-        return parsed.path.replace("driver/", "");
-      }
-      
-      if (parsed.queryParams?.token) {
-        return parsed.queryParams.token as string;
-      }
-      
-      const pathMatch = url.match(/\/driver\/([^/?]+)/);
+      // Try direct path matching first for https:// URLs
+      // Format: https://domain/driver/drv_xxxxx
+      const pathMatch = url.match(/\/driver\/(drv_[a-zA-Z0-9]+)/);
       if (pathMatch) {
+        console.log("[DeepLink] Extracted token from path:", pathMatch[1]);
         return pathMatch[1];
       }
+      
+      // Fallback: try any token format after /driver/
+      const anyTokenMatch = url.match(/\/driver\/([^/?]+)/);
+      if (anyTokenMatch && anyTokenMatch[1]) {
+        console.log("[DeepLink] Extracted token (fallback):", anyTokenMatch[1]);
+        return anyTokenMatch[1];
+      }
+      
+      // Try expo-linking parser for pingpoint:// scheme
+      const parsed = Linking.parse(url);
+      console.log("[DeepLink] Parsed URL:", JSON.stringify(parsed));
+      
+      if (parsed.path?.startsWith("driver/")) {
+        const token = parsed.path.replace("driver/", "");
+        console.log("[DeepLink] Token from parsed path:", token);
+        return token;
+      }
+      
+      // Check query params
+      if (parsed.queryParams?.token) {
+        console.log("[DeepLink] Token from query params:", parsed.queryParams.token);
+        return parsed.queryParams.token as string;
+      }
 
+      console.log("[DeepLink] No token found in URL");
       return null;
     } catch (e) {
-      console.error("Failed to parse URL:", e);
+      console.error("[DeepLink] Failed to parse URL:", e);
       return null;
     }
   };
