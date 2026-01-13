@@ -12,7 +12,9 @@ interface LoadCardProps {
   load: Load;
   isLocationEnabled: boolean;
   isLocationLoading: boolean;
+  isLocationDenied: boolean;
   onToggleLocation: () => void;
+  onOpenSettings: () => void;
 }
 
 function getStatusLabel(status: LoadStatus): string {
@@ -32,7 +34,9 @@ export default function LoadCard({
   load,
   isLocationEnabled,
   isLocationLoading,
+  isLocationDenied,
   onToggleLocation,
+  onOpenSettings,
 }: LoadCardProps) {
   const { appTheme } = useAppTheme();
   const isArcade = appTheme === "arcade";
@@ -42,6 +46,13 @@ export default function LoadCard({
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     onToggleLocation();
+  };
+
+  const handleOpenSettings = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    onOpenSettings();
   };
 
   return (
@@ -69,31 +80,50 @@ export default function LoadCard({
         </View>
       </View>
 
-      <Pressable
-        onPress={handleToggleLocation}
-        disabled={isLocationLoading}
-        style={({ pressed }) => [
-          styles.locationButton,
-          isLocationEnabled && styles.locationButtonEnabled,
-          pressed && styles.locationButtonPressed,
-          isArcade && (isLocationEnabled ? Shadows.arcade.cyan : Shadows.arcade.yellow),
-        ]}
-      >
-        {isLocationLoading ? (
-          <ActivityIndicator size="small" color={PingPointColors.background} />
-        ) : (
-          <>
-            <Feather
-              name={isLocationEnabled ? "navigation" : "navigation-2"}
-              size={18}
-              color={PingPointColors.background}
-            />
-            <ThemedText style={styles.locationButtonText}>
-              {isLocationEnabled ? "Location Sharing Active" : "Enable Location Sharing"}
-            </ThemedText>
-          </>
-        )}
-      </Pressable>
+      {isLocationDenied && Platform.OS !== "web" ? (
+        <View style={styles.deniedContainer}>
+          <Pressable
+            onPress={handleOpenSettings}
+            style={({ pressed }) => [
+              styles.locationButton,
+              styles.settingsButton,
+              pressed && styles.locationButtonPressed,
+            ]}
+          >
+            <Feather name="settings" size={18} color={PingPointColors.background} />
+            <ThemedText style={styles.locationButtonText}>Open Settings</ThemedText>
+          </Pressable>
+          <ThemedText style={styles.deniedText}>
+            Location permission was denied. Enable it in Settings to share your location.
+          </ThemedText>
+        </View>
+      ) : (
+        <Pressable
+          onPress={handleToggleLocation}
+          disabled={isLocationLoading}
+          style={({ pressed }) => [
+            styles.locationButton,
+            isLocationEnabled && styles.locationButtonEnabled,
+            pressed && styles.locationButtonPressed,
+            isArcade && (isLocationEnabled ? Shadows.arcade.cyan : Shadows.arcade.yellow),
+          ]}
+        >
+          {isLocationLoading ? (
+            <ActivityIndicator size="small" color={PingPointColors.background} />
+          ) : (
+            <>
+              <Feather
+                name={isLocationEnabled ? "navigation" : "navigation-2"}
+                size={18}
+                color={PingPointColors.background}
+              />
+              <ThemedText style={styles.locationButtonText}>
+                {isLocationEnabled ? "Location Sharing Active" : "Enable Location Sharing"}
+              </ThemedText>
+            </>
+          )}
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -175,5 +205,16 @@ const styles = StyleSheet.create({
     ...Typography.button,
     color: PingPointColors.background,
     textTransform: "uppercase",
+  },
+  deniedContainer: {
+    gap: Spacing.sm,
+  },
+  settingsButton: {
+    backgroundColor: PingPointColors.textMuted,
+  },
+  deniedText: {
+    ...Typography.caption,
+    color: PingPointColors.textMuted,
+    textAlign: "center",
   },
 });

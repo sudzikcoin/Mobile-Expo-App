@@ -1,0 +1,220 @@
+```
+Connect the PingPoint Driver mobile app to the real backend API and implement missing features.
+
+CURRENT STATE:
+- App works with mock data only
+- No API integration
+- No deep linking
+- No real GPS tracking to server
+
+REQUIRED CHANGES:
+
+1. API INTEGRATION:
+
+Create /client/lib/api.ts:
+- Base URL from environment variable (EXPO_PUBLIC_API_URL)
+- GET /api/driver/:token - fetch load data
+- POST /api/driver/:token/ping - send GPS coordinates (lat, lng, accuracy, speed, heading)
+- POST /api/driver/:token/stops/:stopId/arrive - mark arrival
+- POST /api/driver/:token/stops/:stopId/depart - mark departure
+- Handle errors and network issues gracefully
+- Add retry logic for ping endpoint
+
+Update DashboardScreen.tsx:
+- Replace MOCK_LOAD with real API call
+- Fetch load data on mount using driver token
+- Call real endpoints for arrive/depart actions
+- Refresh load data after each action
+- Show error messages if API fails
+
+2. DEEP LINKING:
+
+Update App.tsx or create new screen:
+- Listen for deep links: pingpoint://driver/:token or https://yourapp.com/driver/:token
+- Parse token from URL
+- Save token to AsyncStorage using setDriverToken()
+- Navigate to Dashboard after token is saved
+- Show "Waiting for invite link..." screen if no token stored
+- Handle initial URL on app launch
+
+Add to app.json:
+```json
+"scheme": "pingpoint",
+"ios": {
+  "associatedDomains": ["applinks:yourapp.com"]
+},
+"android": {
+  "intentFilters": [
+    {
+      "action": "VIEW",
+      "data": [
+        {
+          "scheme": "https",
+          "host": "yourapp.com",
+          "pathPrefix": "/driver"
+        }
+      ],
+      "category": ["BROWSABLE", "DEFAULT"]
+    }
+  ]
+}
+```
+
+1. REAL GPS TRACKING:
+
+Update DashboardScreen.tsx handleToggleLocation():
+
+- When location enabled: start sending GPS every 60 seconds
+- Use setInterval or expo-task-manager for background tracking
+- Call POST /api/driver/:token/ping with coordinates
+- Show last sent timestamp in UI
+- Handle permission errors properly
+- Stop tracking when disabled
+
+Add GPS indicator:
+
+- Green dot when actively sending location
+- Gray dot when location disabled
+- Show “Last update: 30s ago” text
+- Show accuracy warning if >5000m (IP-based location)
+
+1. BACKGROUND GPS (Optional but recommended):
+
+Install expo-task-manager and expo-location:
+
+- Define background location task
+- Request background permissions (iOS: “Always Allow”)
+- Send GPS pings even when app is minimized
+- Handle Android background restrictions
+- Add notification for “App is tracking location”
+
+1. ENVIRONMENT VARIABLES:
+
+Create .env file:
+
+```
+EXPO_PUBLIC_API_URL=https://your-pingpoint-backend.com
+```
+
+Update app.json:
+
+```json
+"extra": {
+  "apiUrl": "${EXPO_PUBLIC_API_URL}"
+}
+```
+
+Access in code:
+
+```typescript
+import Constants from 'expo-constants';
+const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000';
+```
+
+1. ERROR HANDLING:
+
+Add error states to DashboardScreen:
+
+- Network error banner
+- Invalid token error
+- GPS permission denied screen
+- Retry button for failed API calls
+
+Add loading states:
+
+- Skeleton loader while fetching load data
+- Disable buttons during API calls
+- Show spinner on arrive/depart actions
+
+1. REMOVE MOCK DATA:
+
+Delete /client/lib/mock-data.ts
+Remove all references to MOCK_LOAD
+Replace with real API calls
+
+1. UPDATE STORAGE:
+
+Modify storage.ts:
+
+- Add getDriverToken() / setDriverToken()
+- Remove mock balance initialization
+- Fetch balance from API response
+- Sync completed loads with server if needed
+
+1. TESTING:
+
+Test scenarios:
+
+- App launch with no token → show invite screen
+- Open deep link → save token and load data
+- Enable location → start sending GPS
+- Arrive/Depart → update server and refresh
+- Network offline → show error, retry when online
+- Background → GPS continues working (if implemented)
+
+IMPORTANT NOTES:
+
+- Keep all existing UI/UX exactly as is
+- Don’t change colors, animations, or theme system
+- Maintain offline capability - cache last load data
+- Handle API errors gracefully without crashes
+- Add console.log for debugging GPS pings
+- Test on real device for GPS functionality
+
+API RESPONSE FORMATS (match existing backend):
+
+GET /api/driver/:token response:
+
+```json
+{
+  "id": "123",
+  "loadNumber": "172703",
+  "customerRef": null,
+  "status": "PLANNED",
+  "rewardBalance": 70,
+  "stops": [
+    {
+      "id": "stop1",
+      "type": "PICKUP",
+      "sequence": 1,
+      "companyName": "Windstream Supply",
+      "city": "Evansville",
+      "state": "IN",
+      "address": "14616 Foundation Ave",
+      "windowFrom": "2025-01-10T21:53:00Z",
+      "windowTo": null,
+      "status": "PLANNED",
+      "arrivedAt": null,
+      "departedAt": null
+    }
+  ]
+}
+```
+
+POST /api/driver/:token/ping body:
+
+```json
+{
+  "lat": 38.123,
+  "lng": -87.456,
+  "accuracy": 15,
+  "speed": null,
+  "heading": null
+}
+```
+
+POST /api/driver/:token/stops/:stopId/arrive response:
+
+```json
+{
+  "success": true,
+  "pointsAwarded": 10,
+  "newBalance": 80
+}
+```
+
+Start with API integration, then deep linking, then GPS tracking.
+
+```
+
+```

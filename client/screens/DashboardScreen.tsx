@@ -1,167 +1,76 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet, ScrollView, RefreshControl, Platform } from "react-native";
+import React, { useState, useCallback } from "react";
+import { View, StyleSheet, ScrollView, RefreshControl, Platform, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import * as Location from "expo-location";
+import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import DashboardHeader from "@/components/DashboardHeader";
 import LoadCard from "@/components/LoadCard";
 import StopCard from "@/components/StopCard";
 import RewardAnimation from "@/components/RewardAnimation";
-import { PingPointColors, Spacing } from "@/constants/theme";
-import { Load, Stop } from "@/lib/types";
-import { MOCK_LOAD, isStopCurrent } from "@/lib/mock-data";
-import {
-  getDriverBalance,
-  addToBalance,
-  getCurrentLoad,
-  setCurrentLoad,
-  addCompletedLoad,
-  isLocationEnabled as getLocationEnabled,
-  setLocationEnabled as setStorageLocationEnabled,
-  addLog,
-} from "@/lib/storage";
+import WelcomeScreen from "@/screens/WelcomeScreen";
+import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
+import { isStopCurrent } from "@/lib/mock-data";
+import { useDriver } from "@/lib/driver-context";
+import { useAppTheme } from "@/lib/theme-context";
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
-  const [balance, setBalance] = useState(70);
-  const [load, setLoad] = useState<Load | null>(null);
-  const [isLocationEnabled, setIsLocationEnabled] = useState(false);
-  const [isLocationLoading, setIsLocationLoading] = useState(false);
+  const { appTheme } = useAppTheme();
+  const isArcade = appTheme === "arcade";
+
+  const {
+    token,
+    isLoading,
+    error,
+    load,
+    balance,
+    isLocationEnabled,
+    isLocationLoading,
+    isLocationDenied,
+    lastPingTime,
+    refreshLoad,
+    toggleLocation,
+    openSettings,
+    handleStopAction,
+  } = useDriver();
+
   const [refreshing, setRefreshing] = useState(false);
   const [rewardPoints, setRewardPoints] = useState(0);
   const [showReward, setShowReward] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const loadData = useCallback(async () => {
-    try {
-      const [savedBalance, savedLoad, locationEnabled] = await Promise.all([
-        getDriverBalance(),
-        getCurrentLoad(),
-        getLocationEnabled(),
-      ]);
-
-      setBalance(savedBalance);
-      setIsLocationEnabled(locationEnabled);
-
-      if (savedLoad) {
-        setLoad(savedLoad);
-      } else {
-        setLoad(MOCK_LOAD);
-        await setCurrentLoad(MOCK_LOAD);
-      }
-    } catch (error) {
-      console.error("Failed to load data:", error);
-      setLoad(MOCK_LOAD);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadData();
+    await refreshLoad();
     setRefreshing(false);
-  }, [loadData]);
+  }, [refreshLoad]);
 
   const handleToggleLocation = async () => {
-    setIsLocationLoading(true);
-
-    try {
-      if (!isLocationEnabled) {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-
-        if (status !== "granted") {
-          if (Platform.OS !== "web") {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-          }
-          setIsLocationLoading(false);
-          return;
-        }
-
-        await setStorageLocationEnabled(true);
-        await addLog({ action: "LOCATION_ENABLED" });
-        setIsLocationEnabled(true);
-
-        const newBalance = await addToBalance(10);
-        setBalance(newBalance);
-        setRewardPoints(10);
-        setShowReward(true);
-      } else {
-        await setStorageLocationEnabled(false);
-        await addLog({ action: "LOCATION_DISABLED" });
-        setIsLocationEnabled(false);
-      }
-    } catch (error) {
-      console.error("Failed to toggle location:", error);
-    } finally {
-      setIsLocationLoading(false);
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    await toggleLocation();
+    
+    if (!isLocationEnabled) {
+      setRewardPoints(10);
+      setShowReward(true);
     }
   };
 
-  const handleStopAction = async (stopId: string, action: "arrive" | "depart") => {
-    if (!load) return;
+  const onStopAction = async (stopId: string, action: "arrive" | "depart") => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
 
-    try {
-      const updatedStops = load.stops.map((stop) => {
-        if (stop.id === stopId) {
-          if (action === "arrive") {
-            return {
-              ...stop,
-              status: "ARRIVED" as const,
-              arrivedAt: new Date().toISOString(),
-            };
-          } else {
-            return {
-              ...stop,
-              status: "DEPARTED" as const,
-              departedAt: new Date().toISOString(),
-            };
-          }
-        }
-        return stop;
-      });
+    setActionLoading(stopId);
+    const result = await handleStopAction(stopId, action);
+    setActionLoading(null);
 
-      const currentStop = load.stops.find((s) => s.id === stopId);
-      await addLog({
-        action: action === "arrive" ? "ARRIVE" : "DEPART",
-        stopId,
-        stopName: currentStop?.companyName,
-      });
-
-      const allDeparted = updatedStops.every((s) => s.status === "DEPARTED");
-      const updatedLoadStatus = allDeparted ? "DELIVERED" : "IN_TRANSIT";
-
-      const updatedLoad: Load = {
-        ...load,
-        status: updatedLoadStatus,
-        stops: updatedStops,
-      };
-
-      setLoad(updatedLoad);
-      await setCurrentLoad(updatedLoad);
-
-      const points = action === "arrive" ? 10 : 20;
-      const newBalance = await addToBalance(points);
-      setBalance(newBalance);
-      setRewardPoints(points);
+    if (result.success && result.pointsAwarded > 0) {
+      setRewardPoints(result.pointsAwarded);
       setShowReward(true);
-
-      if (allDeparted) {
-        await addCompletedLoad(updatedLoad);
-        await setCurrentLoad(null);
-
-        setTimeout(() => {
-          setLoad(null);
-        }, 2000);
-      }
-    } catch (error) {
-      console.error("Failed to update stop:", error);
     }
   };
 
@@ -170,12 +79,24 @@ export default function DashboardScreen() {
     setRewardPoints(0);
   };
 
-  if (isLoading) {
+  const getTimeSinceLastPing = (): string => {
+    if (!lastPingTime) return "";
+    const seconds = Math.floor((Date.now() - lastPingTime.getTime()) / 1000);
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}m ago`;
+  };
+
+  if (!token) {
+    return <WelcomeScreen isLoading={isLoading} />;
+  }
+
+  if (isLoading && !load) {
     return (
       <View style={styles.container}>
         <DashboardHeader balance={balance} />
         <View style={styles.loadingContainer}>
-          <ThemedText style={styles.loadingText}>Loading...</ThemedText>
+          <ThemedText style={styles.loadingText}>Loading your assignment...</ThemedText>
         </View>
       </View>
     );
@@ -184,6 +105,16 @@ export default function DashboardScreen() {
   return (
     <View style={styles.container}>
       <DashboardHeader balance={balance} />
+
+      {error ? (
+        <View style={styles.errorBanner}>
+          <Feather name="alert-circle" size={16} color={PingPointColors.yellow} />
+          <ThemedText style={styles.errorText}>{error}</ThemedText>
+          <Pressable onPress={onRefresh} style={styles.retryButton}>
+            <ThemedText style={styles.retryText}>Retry</ThemedText>
+          </Pressable>
+        </View>
+      ) : null}
 
       <ScrollView
         style={styles.scrollView}
@@ -207,8 +138,24 @@ export default function DashboardScreen() {
               load={load}
               isLocationEnabled={isLocationEnabled}
               isLocationLoading={isLocationLoading}
+              isLocationDenied={isLocationDenied}
               onToggleLocation={handleToggleLocation}
+              onOpenSettings={openSettings}
             />
+
+            {isLocationEnabled ? (
+              <View style={[styles.gpsIndicator, isArcade && styles.gpsIndicatorArcade]}>
+                <View style={styles.gpsStatusRow}>
+                  <View style={styles.gpsDot} />
+                  <ThemedText style={styles.gpsStatusText}>GPS Active</ThemedText>
+                </View>
+                {lastPingTime ? (
+                  <ThemedText style={styles.gpsLastUpdate}>
+                    Last update: {getTimeSinceLastPing()}
+                  </ThemedText>
+                ) : null}
+              </View>
+            ) : null}
 
             <View style={styles.stopsSection}>
               <ThemedText style={styles.sectionTitle}>STOPS</ThemedText>
@@ -218,7 +165,8 @@ export default function DashboardScreen() {
                     key={stop.id}
                     stop={stop}
                     isCurrent={isStopCurrent(stop, load.stops)}
-                    onAction={handleStopAction}
+                    onAction={onStopAction}
+                    isLoading={actionLoading === stop.id}
                   />
                 ))}
               </View>
@@ -254,7 +202,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
-    gap: Spacing.xl,
+    gap: Spacing.lg,
   },
   loadingContainer: {
     flex: 1,
@@ -262,6 +210,65 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   loadingText: {
+    color: PingPointColors.textSecondary,
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 215, 0, 0.15)",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    gap: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 215, 0, 0.3)",
+  },
+  errorText: {
+    flex: 1,
+    ...Typography.small,
+    color: PingPointColors.yellow,
+  },
+  retryButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: PingPointColors.yellow,
+  },
+  retryText: {
+    ...Typography.badge,
+    color: PingPointColors.background,
+  },
+  gpsIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(0, 217, 255, 0.1)",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: "rgba(0, 217, 255, 0.3)",
+  },
+  gpsIndicatorArcade: {
+    borderColor: PingPointColors.cyan,
+  },
+  gpsStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  gpsDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#00ff88",
+  },
+  gpsStatusText: {
+    ...Typography.small,
+    fontWeight: "600",
+    color: PingPointColors.cyan,
+  },
+  gpsLastUpdate: {
+    ...Typography.caption,
     color: PingPointColors.textSecondary,
   },
   stopsSection: {
