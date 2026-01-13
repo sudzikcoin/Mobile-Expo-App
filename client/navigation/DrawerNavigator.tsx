@@ -18,7 +18,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { useAppTheme } from "@/lib/theme-context";
 
 export type DrawerParamList = {
-  Dashboard: undefined;
+  Dashboard: { token?: string } | undefined;
   History: undefined;
   Logs: undefined;
   Settings: undefined;

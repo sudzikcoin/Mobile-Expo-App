@@ -1,6 +1,7 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { View, StyleSheet, ScrollView, RefreshControl, Platform, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRoute, RouteProp } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
 
@@ -14,8 +15,12 @@ import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/
 import { isStopCurrent } from "@/lib/mock-data";
 import { useDriver } from "@/lib/driver-context";
 import { useAppTheme } from "@/lib/theme-context";
+import type { DrawerParamList } from "@/navigation/DrawerNavigator";
+
+type DashboardRouteProp = RouteProp<DrawerParamList, "Dashboard">;
 
 export default function DashboardScreen() {
+  const route = useRoute<DashboardRouteProp>();
   const insets = useSafeAreaInsets();
   const { colors, isArcade } = useAppTheme();
 
@@ -33,9 +38,18 @@ export default function DashboardScreen() {
     toggleLocation,
     openSettings,
     handleStopAction,
+    setToken,
   } = useDriver();
 
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    const routeToken = route.params?.token;
+    if (routeToken && routeToken !== token) {
+      console.log("[Dashboard] Setting token from route params:", routeToken);
+      setToken(routeToken);
+    }
+  }, [route.params?.token, token, setToken]);
   const [rewardPoints, setRewardPoints] = useState(0);
   const [showReward, setShowReward] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);

@@ -20,7 +20,10 @@ Preferred communication style: Simple, everyday language.
 **Navigation Structure**:
 - Root Stack Navigator wraps a Drawer Navigator
 - Main screens: Dashboard, History, Logs, Settings
-- Deep linking configured for `pingpoint://` and `https://pingpoint.app`
+- Deep linking configured for:
+  - `pingpoint://driver/:token` (custom scheme)
+  - `https://6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev/driver/:token` (production)
+- Token format: `drv_[unique_id]`
 
 **State Management**:
 - React Context for driver state (`DriverProvider`) and theme state (`ThemeProvider`)
@@ -82,4 +85,5 @@ Preferred communication style: Simple, everyday language.
 **Environment Variables**:
 - `DATABASE_URL` - PostgreSQL connection string
 - `EXPO_PUBLIC_DOMAIN` - API base URL for client
+- `EXPO_PUBLIC_API_URL` - PingPoint backend API URL (currently: https://6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev)
 - `REPLIT_DEV_DOMAIN` - Development domain for CORS
