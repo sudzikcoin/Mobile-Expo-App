@@ -12,7 +12,13 @@ const KEYS = {
 
 export async function getDriverToken(): Promise<string | null> {
   try {
-    return await AsyncStorage.getItem(KEYS.DRIVER_TOKEN);
+    const token = await AsyncStorage.getItem(KEYS.DRIVER_TOKEN);
+    // Filter out invalid tokens that may have been persisted as strings
+    if (token === "undefined" || token === "null" || token === "") {
+      await AsyncStorage.removeItem(KEYS.DRIVER_TOKEN);
+      return null;
+    }
+    return token;
   } catch (error) {
     console.error("Failed to get driver token:", error);
     return null;
@@ -21,6 +27,11 @@ export async function getDriverToken(): Promise<string | null> {
 
 export async function setDriverToken(token: string): Promise<void> {
   try {
+    // Don't save invalid tokens
+    if (!token || token === "undefined" || token === "null") {
+      console.warn("[Storage] Attempted to save invalid token:", token);
+      return;
+    }
     await AsyncStorage.setItem(KEYS.DRIVER_TOKEN, token);
   } catch (error) {
     console.error("Failed to set driver token:", error);

@@ -3,6 +3,8 @@ import { Load, Stop, LoadStatus, StopStatus, StopType } from "./types";
 
 const API_BASE_URL = getApiUrl();
 
+console.log("[API Client] Initialized with base URL:", API_BASE_URL);
+
 interface APIStop {
   id: string;
   type: "PICKUP" | "DELIVERY";
@@ -99,25 +101,32 @@ function transformAPIResponse(data: APILoadResponse): { load: Load; balance: num
 }
 
 export async function fetchDriverLoad(token: string): Promise<{ load: Load; balance: number } | null> {
+  const url = `${API_BASE_URL}/api/driver/${token}`;
+  console.log("[API] Fetching driver load from:", url);
+  
   try {
-    const response = await fetch(`${API_BASE_URL}/api/driver/${token}`, {
+    const response = await fetch(url, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
       },
     });
 
+    console.log("[API] Response status:", response.status);
+
     if (!response.ok) {
       if (response.status === 404) {
+        console.log("[API] Driver not found (404)");
         return null;
       }
       throw new Error(`API error: ${response.status}`);
     }
 
     const data: APILoadResponse = await response.json();
+    console.log("[API] Successfully fetched driver data:", data.loadNumber);
     return transformAPIResponse(data);
   } catch (error) {
-    console.error("Failed to fetch driver load:", error);
+    console.error("[API] Failed to fetch driver load:", error);
     throw error;
   }
 }

@@ -67,27 +67,39 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   };
 
   const setToken = async (newToken: string) => {
+    if (!newToken || newToken === "undefined" || newToken === "null") {
+      console.warn("[Driver] Attempted to set invalid token:", newToken);
+      return;
+    }
+    console.log("[Driver] Setting token:", newToken);
     await saveDriverToken(newToken);
     setTokenState(newToken);
     setError(null);
   };
 
   const refreshLoad = useCallback(async () => {
-    if (!token) return;
+    if (!token || token === "undefined" || token === "null") {
+      console.log("[Driver] Skipping refresh - no valid token");
+      return;
+    }
+
+    console.log("[Driver] Refreshing load for token:", token);
 
     try {
       setError(null);
       const result = await fetchDriverLoad(token);
       
       if (result) {
+        console.log("[Driver] Load fetched successfully:", result.load.loadNumber);
         setLoad(result.load);
         setBalance(result.balance);
       } else {
+        console.log("[Driver] No load found for token:", token);
         setLoad(null);
         setError("No active load found");
       }
     } catch (err) {
-      console.error("Failed to fetch load:", err);
+      console.error("[Driver] Failed to fetch load:", err);
       setError("Failed to connect to server");
     }
   }, [token]);
@@ -268,7 +280,8 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (token) {
+    if (token && token !== "undefined" && token !== "null") {
+      console.log("[Driver] Token changed, fetching load:", token);
       setIsLoading(true);
       refreshLoad().finally(() => setIsLoading(false));
     }
