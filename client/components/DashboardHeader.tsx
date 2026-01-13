@@ -48,11 +48,13 @@ export default function DashboardHeader({ balance }: DashboardHeaderProps) {
           onPress={handleMenuPress}
           style={({ pressed }) => [
             styles.menuButton,
+            isArcade && styles.menuButtonArcade,
             pressed && styles.menuButtonPressed,
           ]}
-          hitSlop={8}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          testID="hamburger-menu"
         >
-          <Feather name="menu" size={24} color={PingPointColors.textPrimary} />
+          <Feather name="menu" size={24} color={PingPointColors.cyan} />
         </Pressable>
       </View>
     </View>
@@ -67,6 +69,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
     backgroundColor: PingPointColors.background,
+    zIndex: 100,
   },
   balancePill: {
     flexDirection: "row",
@@ -119,11 +122,22 @@ const styles = StyleSheet.create({
     color: PingPointColors.textSecondary,
   },
   menuButton: {
-    padding: Spacing.xs,
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
     borderRadius: BorderRadius.sm,
+    backgroundColor: "rgba(0, 217, 255, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 217, 255, 0.3)",
+    zIndex: 10,
+  },
+  menuButtonArcade: {
+    ...Shadows.arcade.cyan,
   },
   menuButtonPressed: {
-    opacity: 0.7,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    opacity: 0.8,
+    backgroundColor: "rgba(0, 217, 255, 0.25)",
+    transform: [{ scale: 0.95 }],
   },
 });
