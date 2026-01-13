@@ -16,8 +16,7 @@ interface DashboardHeaderProps {
 export default function DashboardHeader({ balance }: DashboardHeaderProps) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const { appTheme } = useAppTheme();
-  const isArcade = appTheme === "arcade";
+  const { colors, isArcade } = useAppTheme();
 
   const handleMenuPress = () => {
     if (Platform.OS !== "web") {
@@ -26,21 +25,30 @@ export default function DashboardHeader({ balance }: DashboardHeaderProps) {
     navigation.dispatch(DrawerActions.openDrawer());
   };
 
+  const accentColor = isArcade ? PingPointColors.cyan : "#ffffff";
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top + Spacing.sm }]}>
-      <View style={[styles.balancePill, isArcade && styles.balancePillArcade]}>
-        <Feather name="award" size={14} color={PingPointColors.cyan} />
-        <ThemedText style={styles.balanceText}>Balance: {balance}</ThemedText>
+    <View style={[styles.container, { paddingTop: insets.top + Spacing.sm, backgroundColor: colors.background }]}>
+      <View style={[
+        styles.balancePill, 
+        { 
+          backgroundColor: isArcade ? "rgba(0, 217, 255, 0.15)" : "rgba(255, 255, 255, 0.1)",
+          borderColor: accentColor,
+        },
+        isArcade && Shadows.arcade.cyan,
+      ]}>
+        <Feather name="award" size={14} color={accentColor} />
+        <ThemedText style={[styles.balanceText, { color: accentColor }]}>Balance: {balance}</ThemedText>
       </View>
 
       <View style={styles.titleContainer}>
-        <ThemedText style={styles.title}>PINGPOINT</ThemedText>
-        <ThemedText style={styles.subtitle}>DRIVER</ThemedText>
+        <ThemedText style={[styles.title, { color: colors.textPrimary }]}>PINGPOINT</ThemedText>
+        <ThemedText style={[styles.subtitle, { color: accentColor }]}>DRIVER</ThemedText>
       </View>
 
       <View style={styles.rightSection}>
-        <View style={styles.themeBadge}>
-          <ThemedText style={styles.themeBadgeText}>
+        <View style={[styles.themeBadge, { backgroundColor: isArcade ? "rgba(0, 217, 255, 0.1)" : "rgba(255, 255, 255, 0.1)" }]}>
+          <ThemedText style={[styles.themeBadgeText, { color: colors.textSecondary }]}>
             {isArcade ? "ARCADE" : "PREMIUM"}
           </ThemedText>
         </View>
@@ -48,13 +56,17 @@ export default function DashboardHeader({ balance }: DashboardHeaderProps) {
           onPress={handleMenuPress}
           style={({ pressed }) => [
             styles.menuButton,
-            isArcade && styles.menuButtonArcade,
+            { 
+              backgroundColor: isArcade ? "rgba(0, 217, 255, 0.1)" : "rgba(255, 255, 255, 0.1)",
+              borderColor: isArcade ? "rgba(0, 217, 255, 0.3)" : colors.border,
+            },
+            isArcade && Shadows.arcade.cyan,
             pressed && styles.menuButtonPressed,
           ]}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           testID="hamburger-menu"
         >
-          <Feather name="menu" size={24} color={PingPointColors.cyan} />
+          <Feather name="menu" size={24} color={accentColor} />
         </Pressable>
       </View>
     </View>

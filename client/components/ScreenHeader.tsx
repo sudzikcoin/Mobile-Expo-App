@@ -7,6 +7,7 @@ import * as Haptics from "expo-haptics";
 
 import { ThemedText } from "@/components/ThemedText";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
+import { useAppTheme } from "@/lib/theme-context";
 
 interface ScreenHeaderProps {
   title: string;
@@ -16,6 +17,7 @@ interface ScreenHeaderProps {
 export default function ScreenHeader({ title, showBack = true }: ScreenHeaderProps) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { colors, isArcade } = useAppTheme();
 
   const handleBack = () => {
     if (Platform.OS !== "web") {
@@ -25,19 +27,19 @@ export default function ScreenHeader({ title, showBack = true }: ScreenHeaderPro
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + Spacing.sm }]}>
+    <View style={[styles.container, { paddingTop: insets.top + Spacing.sm, backgroundColor: colors.background }]}>
       {showBack ? (
         <Pressable
           onPress={handleBack}
           style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
           hitSlop={8}
         >
-          <Feather name="arrow-left" size={24} color={PingPointColors.textPrimary} />
+          <Feather name="arrow-left" size={24} color={colors.textPrimary} />
         </Pressable>
       ) : (
         <View style={styles.placeholder} />
       )}
-      <ThemedText style={styles.title}>{title}</ThemedText>
+      <ThemedText style={[styles.title, { color: colors.textPrimary }]}>{title}</ThemedText>
       <View style={styles.placeholder} />
     </View>
   );

@@ -17,8 +17,7 @@ import { useAppTheme } from "@/lib/theme-context";
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
-  const { appTheme } = useAppTheme();
-  const isArcade = appTheme === "arcade";
+  const { colors, isArcade } = useAppTheme();
 
   const {
     token,
@@ -93,17 +92,17 @@ export default function DashboardScreen() {
 
   if (isLoading && !load) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <DashboardHeader balance={balance} />
         <View style={styles.loadingContainer}>
-          <ThemedText style={styles.loadingText}>Loading your assignment...</ThemedText>
+          <ThemedText style={[styles.loadingText, { color: colors.textSecondary }]}>Loading your assignment...</ThemedText>
         </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <DashboardHeader balance={balance} />
 
       {error ? (
@@ -144,13 +143,20 @@ export default function DashboardScreen() {
             />
 
             {isLocationEnabled ? (
-              <View style={[styles.gpsIndicator, isArcade && styles.gpsIndicatorArcade]}>
+              <View style={[
+                styles.gpsIndicator, 
+                { 
+                  backgroundColor: isArcade ? "rgba(0, 217, 255, 0.1)" : "rgba(255, 255, 255, 0.05)",
+                  borderColor: isArcade ? PingPointColors.cyan : colors.border,
+                  borderRadius: colors.borderRadius,
+                }
+              ]}>
                 <View style={styles.gpsStatusRow}>
-                  <View style={styles.gpsDot} />
-                  <ThemedText style={styles.gpsStatusText}>GPS Active</ThemedText>
+                  <View style={[styles.gpsDot, { backgroundColor: isArcade ? "#00ff88" : "#ffffff" }]} />
+                  <ThemedText style={[styles.gpsStatusText, { color: isArcade ? PingPointColors.cyan : "#ffffff" }]}>GPS Active</ThemedText>
                 </View>
                 {lastPingTime ? (
-                  <ThemedText style={styles.gpsLastUpdate}>
+                  <ThemedText style={[styles.gpsLastUpdate, { color: colors.textSecondary }]}>
                     Last update: {getTimeSinceLastPing()}
                   </ThemedText>
                 ) : null}
@@ -158,7 +164,7 @@ export default function DashboardScreen() {
             ) : null}
 
             <View style={styles.stopsSection}>
-              <ThemedText style={styles.sectionTitle}>STOPS</ThemedText>
+              <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>STOPS</ThemedText>
               <View style={styles.stopsList}>
                 {load.stops.map((stop) => (
                   <StopCard

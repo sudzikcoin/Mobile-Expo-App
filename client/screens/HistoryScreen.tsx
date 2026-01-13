@@ -15,40 +15,47 @@ import emptyHistoryImage from "@/assets/images/empty-history.png";
 
 interface LoadHistoryItemProps {
   load: Load;
-  isArcade: boolean;
 }
 
-function LoadHistoryItem({ load, isArcade }: LoadHistoryItemProps) {
+function LoadHistoryItem({ load }: LoadHistoryItemProps) {
+  const { colors, isArcade } = useAppTheme();
   const lastStop = load.stops[load.stops.length - 1];
   const deliveredAt = lastStop?.departedAt;
 
   return (
-    <View style={[styles.loadCard, isArcade && styles.loadCardArcade]}>
+    <View style={[
+      styles.loadCard, 
+      { 
+        backgroundColor: colors.surface,
+        borderColor: isArcade ? "rgba(0, 217, 255, 0.2)" : colors.border,
+        borderRadius: colors.borderRadius,
+      }
+    ]}>
       <View style={styles.loadHeader}>
-        <ThemedText style={styles.loadNumber}>LOAD #{load.loadNumber}</ThemedText>
-        <View style={styles.deliveredBadge}>
-          <ThemedText style={styles.deliveredText}>DELIVERED</ThemedText>
+        <ThemedText style={[styles.loadNumber, { color: isArcade ? PingPointColors.yellow : "#ffffff" }]}>LOAD #{load.loadNumber}</ThemedText>
+        <View style={[styles.deliveredBadge, { backgroundColor: isArcade ? "rgba(0, 217, 255, 0.2)" : "rgba(255, 255, 255, 0.1)" }]}>
+          <ThemedText style={[styles.deliveredText, { color: isArcade ? PingPointColors.cyan : "#ffffff" }]}>DELIVERED</ThemedText>
         </View>
       </View>
 
       <View style={styles.routeRow}>
-        <ThemedText style={styles.routeText}>
+        <ThemedText style={[styles.routeText, { color: colors.textPrimary }]}>
           {load.originCity}, {load.originState}
         </ThemedText>
-        <ThemedText style={styles.arrow}>→</ThemedText>
-        <ThemedText style={styles.routeText}>
+        <ThemedText style={[styles.arrow, { color: colors.textSecondary }]}>→</ThemedText>
+        <ThemedText style={[styles.routeText, { color: colors.textPrimary }]}>
           {load.destinationCity}, {load.destinationState}
         </ThemedText>
       </View>
 
       {deliveredAt ? (
-        <ThemedText style={styles.deliveredDate}>
+        <ThemedText style={[styles.deliveredDate, { color: colors.textSecondary }]}>
           Completed: {formatDateTime(deliveredAt)}
         </ThemedText>
       ) : null}
 
-      <View style={styles.stopsInfo}>
-        <ThemedText style={styles.stopsInfoText}>
+      <View style={[styles.stopsInfo, { borderTopColor: colors.border }]}>
+        <ThemedText style={[styles.stopsInfoText, { color: colors.textMuted }]}>
           {load.stops.length} stops
         </ThemedText>
       </View>
@@ -58,8 +65,7 @@ function LoadHistoryItem({ load, isArcade }: LoadHistoryItemProps) {
 
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
-  const { appTheme } = useAppTheme();
-  const isArcade = appTheme === "arcade";
+  const { colors, isArcade } = useAppTheme();
   const [loads, setLoads] = useState<Load[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,11 +97,11 @@ export default function HistoryScreen() {
   }, [loadHistory]);
 
   const renderItem = ({ item }: { item: Load }) => (
-    <LoadHistoryItem load={item} isArcade={isArcade} />
+    <LoadHistoryItem load={item} />
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScreenHeader title="History" />
 
       <FlatList

@@ -24,6 +24,46 @@ export const PingPointColors = {
   error: "#ff4444",
 };
 
+export const ArcadeTheme = {
+  background: "#0a0a1f",
+  surface: "#12122a",
+  surfaceLight: "#1a1a3a",
+  border: "#2a2a4a",
+  borderActive: cyanPrimary,
+  accent: cyanPrimary,
+  accentSecondary: yellowSecondary,
+  accentGlow: "rgba(0, 217, 255, 0.3)",
+  textPrimary: "#ffffff",
+  textSecondary: "#a0a0c0",
+  textMuted: "#606080",
+  cardBorder: "rgba(0, 217, 255, 0.2)",
+  cardGlow: true,
+  borderRadius: 20,
+};
+
+export const PremiumTheme = {
+  background: "#0f0f0f",
+  surface: "#1a1a1a",
+  surfaceLight: "#252525",
+  border: "#333333",
+  borderActive: "#555555",
+  accent: "#ffffff",
+  accentSecondary: "#888888",
+  accentGlow: "transparent",
+  textPrimary: "#ffffff",
+  textSecondary: "#b0b0b0",
+  textMuted: "#666666",
+  cardBorder: "#333333",
+  cardGlow: false,
+  borderRadius: 12,
+};
+
+export type ThemeColors = typeof ArcadeTheme;
+
+export function getThemeColors(theme: AppTheme): ThemeColors {
+  return theme === "arcade" ? ArcadeTheme : PremiumTheme;
+}
+
 export const Colors = {
   light: {
     text: "#ffffff",

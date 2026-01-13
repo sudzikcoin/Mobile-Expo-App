@@ -87,30 +87,35 @@ function SettingRow({
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { appTheme, toggleTheme } = useAppTheme();
-  const isArcade = appTheme === "arcade";
+  const { appTheme, setAppTheme, colors, isArcade } = useAppTheme();
+
+  const handleThemeChange = (theme: "arcade" | "premium") => {
+    console.log("[Settings] Changing theme to:", theme);
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    setAppTheme(theme);
+  };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScreenHeader title="Settings" />
 
       <View style={[styles.content, { paddingBottom: insets.bottom + Spacing.xl }]}>
         <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>APPEARANCE</ThemedText>
+          <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>APPEARANCE</ThemedText>
 
           <View style={styles.themeSelector}>
             <Pressable
-              onPress={() => {
-                if (appTheme !== "arcade") {
-                  if (Platform.OS !== "web") {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  }
-                  toggleTheme();
-                }
-              }}
+              onPress={() => handleThemeChange("arcade")}
               style={({ pressed }) => [
                 styles.themeOption,
-                isArcade && styles.themeOptionActive,
+                { 
+                  backgroundColor: colors.surface,
+                  borderColor: isArcade ? PingPointColors.cyan : colors.border,
+                  borderRadius: colors.borderRadius,
+                },
+                isArcade && styles.themeOptionActiveArcade,
                 isArcade && Shadows.arcade.cyan,
                 pressed && styles.themeOptionPressed,
               ]}
@@ -118,50 +123,48 @@ export default function SettingsScreen() {
               <Feather
                 name="zap"
                 size={24}
-                color={isArcade ? PingPointColors.cyan : PingPointColors.textMuted}
+                color={isArcade ? PingPointColors.cyan : colors.textMuted}
               />
               <ThemedText
                 style={[
                   styles.themeOptionLabel,
-                  isArcade && styles.themeOptionLabelActive,
+                  { color: isArcade ? PingPointColors.cyan : colors.textSecondary },
                 ]}
               >
                 ARCADE 90s
               </ThemedText>
-              <ThemedText style={styles.themeOptionDesc}>
+              <ThemedText style={[styles.themeOptionDesc, { color: colors.textMuted }]}>
                 Neon glows & cyberpunk vibes
               </ThemedText>
             </Pressable>
 
             <Pressable
-              onPress={() => {
-                if (appTheme !== "premium") {
-                  if (Platform.OS !== "web") {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  }
-                  toggleTheme();
-                }
-              }}
+              onPress={() => handleThemeChange("premium")}
               style={({ pressed }) => [
                 styles.themeOption,
-                !isArcade && styles.themeOptionActive,
+                { 
+                  backgroundColor: colors.surface,
+                  borderColor: !isArcade ? "#ffffff" : colors.border,
+                  borderRadius: colors.borderRadius,
+                },
+                !isArcade && styles.themeOptionActivePremium,
                 pressed && styles.themeOptionPressed,
               ]}
             >
               <Feather
                 name="moon"
                 size={24}
-                color={!isArcade ? PingPointColors.cyan : PingPointColors.textMuted}
+                color={!isArcade ? "#ffffff" : colors.textMuted}
               />
               <ThemedText
                 style={[
                   styles.themeOptionLabel,
-                  !isArcade && styles.themeOptionLabelActive,
+                  { color: !isArcade ? "#ffffff" : colors.textSecondary },
                 ]}
               >
                 PREMIUM
               </ThemedText>
-              <ThemedText style={styles.themeOptionDesc}>
+              <ThemedText style={[styles.themeOptionDesc, { color: colors.textMuted }]}>
                 Clean & refined dark mode
               </ThemedText>
             </Pressable>
@@ -188,7 +191,6 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: PingPointColors.background,
   },
   content: {
     flex: 1,
@@ -201,7 +203,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...Typography.caption,
     fontWeight: "600",
-    color: PingPointColors.textMuted,
     letterSpacing: 2,
     marginBottom: Spacing.md,
     marginLeft: Spacing.xs,
@@ -212,17 +213,16 @@ const styles = StyleSheet.create({
   },
   themeOption: {
     flex: 1,
-    backgroundColor: PingPointColors.surface,
-    borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
     borderWidth: 2,
-    borderColor: PingPointColors.border,
     alignItems: "center",
     gap: Spacing.sm,
   },
-  themeOptionActive: {
-    borderColor: PingPointColors.cyan,
+  themeOptionActiveArcade: {
     backgroundColor: "rgba(0, 217, 255, 0.1)",
+  },
+  themeOptionActivePremium: {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
   },
   themeOptionPressed: {
     opacity: 0.8,
@@ -230,14 +230,9 @@ const styles = StyleSheet.create({
   },
   themeOptionLabel: {
     ...Typography.button,
-    color: PingPointColors.textSecondary,
-  },
-  themeOptionLabelActive: {
-    color: PingPointColors.cyan,
   },
   themeOptionDesc: {
     ...Typography.caption,
-    color: PingPointColors.textMuted,
     textAlign: "center",
   },
   settingRow: {

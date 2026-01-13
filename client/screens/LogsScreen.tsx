@@ -65,28 +65,35 @@ function formatLogTime(isoString: string): { date: string; time: string } {
 
 interface LogItemProps {
   log: LogEntry;
-  isArcade: boolean;
 }
 
-function LogItem({ log, isArcade }: LogItemProps) {
+function LogItem({ log }: LogItemProps) {
+  const { colors, isArcade } = useAppTheme();
   const icon = getActionIcon(log.action);
   const label = getActionLabel(log.action);
   const { date, time } = formatLogTime(log.timestamp);
 
   return (
-    <View style={[styles.logCard, isArcade && styles.logCardArcade]}>
+    <View style={[
+      styles.logCard, 
+      { 
+        backgroundColor: colors.surface,
+        borderColor: isArcade ? "rgba(0, 217, 255, 0.15)" : colors.border,
+        borderRadius: colors.borderRadius,
+      }
+    ]}>
       <View style={[styles.iconContainer, { backgroundColor: `${icon.color}20` }]}>
         <Feather name={icon.name} size={18} color={icon.color} />
       </View>
 
       <View style={styles.logContent}>
-        <ThemedText style={styles.logLabel}>{label}</ThemedText>
+        <ThemedText style={[styles.logLabel, { color: colors.textPrimary }]}>{label}</ThemedText>
         {log.stopName ? (
-          <ThemedText style={styles.stopName}>{log.stopName}</ThemedText>
+          <ThemedText style={[styles.stopName, { color: colors.textSecondary }]}>{log.stopName}</ThemedText>
         ) : null}
         <View style={styles.timeRow}>
-          <ThemedText style={styles.logDate}>{date}</ThemedText>
-          <ThemedText style={styles.logTime}>{time}</ThemedText>
+          <ThemedText style={[styles.logDate, { color: colors.textMuted }]}>{date}</ThemedText>
+          <ThemedText style={[styles.logTime, { color: colors.textMuted }]}>{time}</ThemedText>
         </View>
       </View>
     </View>
@@ -95,8 +102,7 @@ function LogItem({ log, isArcade }: LogItemProps) {
 
 export default function LogsScreen() {
   const insets = useSafeAreaInsets();
-  const { appTheme } = useAppTheme();
-  const isArcade = appTheme === "arcade";
+  const { colors, isArcade } = useAppTheme();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -123,11 +129,11 @@ export default function LogsScreen() {
   }, [loadLogs]);
 
   const renderItem = ({ item }: { item: LogEntry }) => (
-    <LogItem log={item} isArcade={isArcade} />
+    <LogItem log={item} />
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScreenHeader title="Logs" />
 
       <FlatList

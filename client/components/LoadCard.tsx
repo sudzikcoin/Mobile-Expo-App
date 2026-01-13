@@ -38,8 +38,7 @@ export default function LoadCard({
   onToggleLocation,
   onOpenSettings,
 }: LoadCardProps) {
-  const { appTheme } = useAppTheme();
-  const isArcade = appTheme === "arcade";
+  const { colors, isArcade } = useAppTheme();
 
   const handleToggleLocation = () => {
     if (Platform.OS !== "web") {
@@ -56,25 +55,39 @@ export default function LoadCard({
   };
 
   return (
-    <View style={[styles.container, isArcade && styles.containerArcade]}>
+    <View style={[
+      styles.container, 
+      { 
+        backgroundColor: colors.surface,
+        borderColor: isArcade ? "rgba(0, 217, 255, 0.3)" : colors.border,
+        borderRadius: colors.borderRadius,
+      },
+      isArcade && Shadows.arcade.cyan,
+    ]}>
       <View style={styles.header}>
-        <ThemedText style={styles.loadNumber}>LOAD #{load.loadNumber}</ThemedText>
-        <View style={styles.statusBadge}>
-          <ThemedText style={styles.statusText}>{getStatusLabel(load.status)}</ThemedText>
+        <ThemedText style={[styles.loadNumber, { color: isArcade ? PingPointColors.yellow : "#ffffff" }]}>LOAD #{load.loadNumber}</ThemedText>
+        <View style={[
+          styles.statusBadge,
+          { 
+            borderColor: isArcade ? PingPointColors.cyan : colors.border,
+            backgroundColor: isArcade ? "rgba(0, 217, 255, 0.1)" : "rgba(255, 255, 255, 0.1)",
+          }
+        ]}>
+          <ThemedText style={[styles.statusText, { color: isArcade ? PingPointColors.cyan : "#ffffff" }]}>{getStatusLabel(load.status)}</ThemedText>
         </View>
       </View>
 
       <View style={styles.routeContainer}>
         <View style={styles.routePoint}>
-          <Feather name="circle" size={10} color={PingPointColors.cyan} />
-          <ThemedText style={styles.routeCity}>
+          <Feather name="circle" size={10} color={isArcade ? PingPointColors.cyan : "#ffffff"} />
+          <ThemedText style={[styles.routeCity, { color: colors.textPrimary }]}>
             {load.originCity.toUpperCase()}
           </ThemedText>
         </View>
-        <View style={styles.routeLine} />
+        <View style={[styles.routeLine, { backgroundColor: colors.border }]} />
         <View style={styles.routePoint}>
-          <Feather name="map-pin" size={12} color={PingPointColors.yellow} />
-          <ThemedText style={styles.routeCity}>
+          <Feather name="map-pin" size={12} color={isArcade ? PingPointColors.yellow : "#ffffff"} />
+          <ThemedText style={[styles.routeCity, { color: colors.textPrimary }]}>
             {load.destinationCity.toUpperCase()}
           </ThemedText>
         </View>
@@ -103,7 +116,12 @@ export default function LoadCard({
           disabled={isLocationLoading}
           style={({ pressed }) => [
             styles.locationButton,
-            isLocationEnabled && styles.locationButtonEnabled,
+            { 
+              backgroundColor: isLocationEnabled 
+                ? (isArcade ? PingPointColors.cyan : "#ffffff") 
+                : (isArcade ? PingPointColors.yellow : "#555555"),
+              borderRadius: colors.borderRadius,
+            },
             pressed && styles.locationButtonPressed,
             isArcade && (isLocationEnabled ? Shadows.arcade.cyan : Shadows.arcade.yellow),
           ]}

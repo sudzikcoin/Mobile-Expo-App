@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AppTheme } from "@/constants/theme";
+import { AppTheme, getThemeColors, ThemeColors } from "@/constants/theme";
 
 const THEME_STORAGE_KEY = "@pingpoint_theme";
 
@@ -8,6 +8,8 @@ interface ThemeContextType {
   appTheme: AppTheme;
   setAppTheme: (theme: AppTheme) => void;
   toggleTheme: () => void;
+  colors: ThemeColors;
+  isArcade: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -31,11 +33,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   };
 
   const setAppTheme = async (theme: AppTheme) => {
+    console.log("[Theme] Setting theme to:", theme);
     try {
       await AsyncStorage.setItem(THEME_STORAGE_KEY, theme);
       setAppThemeState(theme);
+      console.log("[Theme] Theme saved successfully");
     } catch (error) {
-      console.error("Failed to save theme:", error);
+      console.error("[Theme] Failed to save theme:", error);
     }
   };
 
@@ -43,8 +47,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setAppTheme(appTheme === "arcade" ? "premium" : "arcade");
   };
 
+  const colors = useMemo(() => getThemeColors(appTheme), [appTheme]);
+  const isArcade = appTheme === "arcade";
+
   return (
-    <ThemeContext.Provider value={{ appTheme, setAppTheme, toggleTheme }}>
+    <ThemeContext.Provider value={{ appTheme, setAppTheme, toggleTheme, colors, isArcade }}>
       {children}
     </ThemeContext.Provider>
   );

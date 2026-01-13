@@ -17,8 +17,7 @@ interface StopCardProps {
 }
 
 export default function StopCard({ stop, isCurrent, onAction, isLoading }: StopCardProps) {
-  const { appTheme } = useAppTheme();
-  const isArcade = appTheme === "arcade";
+  const { colors, isArcade } = useAppTheme();
   const completed = isStopCompleted(stop);
   const actionLabel = getStopActionLabel(stop);
 
@@ -34,9 +33,14 @@ export default function StopCard({ stop, isCurrent, onAction, isLoading }: StopC
     <View
       style={[
         styles.container,
+        { 
+          backgroundColor: completed ? colors.surfaceLight : colors.surface,
+          borderColor: isCurrent ? (isArcade ? PingPointColors.cyan : "#ffffff") : colors.border,
+          borderRadius: colors.borderRadius,
+        },
         completed && styles.containerCompleted,
-        isCurrent && styles.containerCurrent,
-        isCurrent && isArcade && styles.containerCurrentArcade,
+        isCurrent && { borderWidth: 2 },
+        isCurrent && isArcade && Shadows.arcade.cyan,
       ]}
     >
       <View style={styles.leftSection}>
@@ -113,6 +117,10 @@ export default function StopCard({ stop, isCurrent, onAction, isLoading }: StopC
             disabled={isLoading}
             style={({ pressed }) => [
               styles.actionButton,
+              { 
+                backgroundColor: isArcade ? PingPointColors.yellow : "#ffffff",
+                borderRadius: colors.borderRadius,
+              },
               pressed && styles.actionButtonPressed,
               isArcade && Shadows.arcade.yellow,
             ]}
