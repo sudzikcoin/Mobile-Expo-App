@@ -1,30 +1,51 @@
 import { Platform } from "react-native";
 
-const tintColorLight = "#007AFF";
-const tintColorDark = "#0A84FF";
+export type AppTheme = "arcade" | "premium";
+
+const cyanPrimary = "#00d9ff";
+const yellowSecondary = "#ffd700";
+const magentaAccent = "#ff00ff";
+const purpleAccent = "#9d4edd";
+
+export const PingPointColors = {
+  cyan: cyanPrimary,
+  yellow: yellowSecondary,
+  magenta: magentaAccent,
+  purple: purpleAccent,
+  background: "#0a0a1f",
+  surface: "#12122a",
+  surfaceLight: "#1a1a3a",
+  border: "#2a2a4a",
+  textPrimary: "#ffffff",
+  textSecondary: "#a0a0c0",
+  textMuted: "#606080",
+  success: cyanPrimary,
+  warning: yellowSecondary,
+  error: "#ff4444",
+};
 
 export const Colors = {
   light: {
-    text: "#11181C",
-    buttonText: "#FFFFFF",
-    tabIconDefault: "#687076",
-    tabIconSelected: tintColorLight,
-    link: "#007AFF",
-    backgroundRoot: "#FFFFFF", // Elevation 0
-    backgroundDefault: "#F2F2F2", // Elevation 1
-    backgroundSecondary: "#E6E6E6", // Elevation 2
-    backgroundTertiary: "#D9D9D9", // Elevation 3
+    text: "#ffffff",
+    buttonText: "#0a0a1f",
+    tabIconDefault: "#606080",
+    tabIconSelected: cyanPrimary,
+    link: cyanPrimary,
+    backgroundRoot: "#0a0a1f",
+    backgroundDefault: "#12122a",
+    backgroundSecondary: "#1a1a3a",
+    backgroundTertiary: "#2a2a4a",
   },
   dark: {
-    text: "#ECEDEE",
-    buttonText: "#FFFFFF",
-    tabIconDefault: "#9BA1A6",
-    tabIconSelected: tintColorDark,
-    link: "#0A84FF",
-    backgroundRoot: "#1F2123", // Elevation 0
-    backgroundDefault: "#2A2C2E", // Elevation 1
-    backgroundSecondary: "#353739", // Elevation 2
-    backgroundTertiary: "#404244", // Elevation 3
+    text: "#ffffff",
+    buttonText: "#0a0a1f",
+    tabIconDefault: "#606080",
+    tabIconSelected: cyanPrimary,
+    link: cyanPrimary,
+    backgroundRoot: "#0a0a1f",
+    backgroundDefault: "#12122a",
+    backgroundSecondary: "#1a1a3a",
+    backgroundTertiary: "#2a2a4a",
   },
 };
 
@@ -45,61 +66,95 @@ export const Spacing = {
 export const BorderRadius = {
   xs: 8,
   sm: 12,
-  md: 18,
-  lg: 24,
-  xl: 30,
-  "2xl": 40,
-  "3xl": 50,
+  md: 16,
+  lg: 20,
+  xl: 24,
+  "2xl": 32,
+  "3xl": 40,
   full: 9999,
 };
 
 export const Typography = {
   h1: {
     fontSize: 32,
-    lineHeight: 40,
     fontWeight: "700" as const,
   },
   h2: {
-    fontSize: 28,
-    lineHeight: 36,
+    fontSize: 24,
     fontWeight: "700" as const,
   },
   h3: {
-    fontSize: 24,
-    lineHeight: 32,
+    fontSize: 20,
     fontWeight: "600" as const,
   },
   h4: {
-    fontSize: 20,
-    lineHeight: 28,
+    fontSize: 18,
     fontWeight: "600" as const,
   },
   body: {
     fontSize: 16,
-    lineHeight: 24,
     fontWeight: "400" as const,
   },
   small: {
     fontSize: 14,
-    lineHeight: 20,
     fontWeight: "400" as const,
   },
-  link: {
-    fontSize: 16,
-    lineHeight: 24,
+  caption: {
+    fontSize: 12,
     fontWeight: "400" as const,
+  },
+  button: {
+    fontSize: 14,
+    fontWeight: "700" as const,
+    letterSpacing: 1,
+  },
+  badge: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    letterSpacing: 0.5,
+  },
+};
+
+export const Shadows = {
+  arcade: {
+    cyan: {
+      shadowColor: cyanPrimary,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.6,
+      shadowRadius: 8,
+      elevation: 8,
+    },
+    yellow: {
+      shadowColor: yellowSecondary,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.6,
+      shadowRadius: 8,
+      elevation: 8,
+    },
+    magenta: {
+      shadowColor: magentaAccent,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.5,
+      shadowRadius: 6,
+      elevation: 6,
+    },
+  },
+  premium: {
+    card: {
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 4,
+    },
   },
 };
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: "system-ui",
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: "ui-serif",
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: "ui-rounded",
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: "ui-monospace",
   },
   default: {
