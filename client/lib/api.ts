@@ -109,10 +109,15 @@ export async function fetchDriverLoad(token: string): Promise<{ load: Load; bala
       method: "GET",
       headers: {
         "Content-Type": "application/json",
+        "Accept": "application/json",
       },
     });
 
     console.log("[API] Response status:", response.status);
+    console.log("[API] Content-Type:", response.headers.get("content-type"));
+
+    const text = await response.text();
+    console.log("[API] Response body preview:", text.substring(0, 200));
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -122,7 +127,13 @@ export async function fetchDriverLoad(token: string): Promise<{ load: Load; bala
       throw new Error(`API error: ${response.status}`);
     }
 
-    const data: APILoadResponse = await response.json();
+    // Check if response is HTML instead of JSON
+    if (text.startsWith("<!") || text.startsWith("<html")) {
+      console.error("[API] Received HTML instead of JSON");
+      throw new Error("Server returned HTML instead of JSON");
+    }
+
+    const data: APILoadResponse = JSON.parse(text);
     console.log("[API] Successfully fetched driver data:", data.loadNumber);
     return transformAPIResponse(data);
   } catch (error) {

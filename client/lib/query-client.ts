@@ -12,9 +12,17 @@ export function getApiUrl(): string {
     return "http://localhost:5000";
   }
 
-  // Remove any port suffix if present (e.g., "domain:5000" -> "domain")
-  const cleanDomain = domain.split(":")[0];
-  const apiUrl = `https://${cleanDomain}`;
+  // EXPO_PUBLIC_DOMAIN is set as "domain:5000" - keep the port for external access
+  // On Replit, external port 5000 routes to the backend server
+  let apiUrl: string;
+  
+  if (domain.includes(":")) {
+    // Port is included (e.g., "domain:5000")
+    apiUrl = `https://${domain}`;
+  } else {
+    // No port, add default backend port
+    apiUrl = `https://${domain}:5000`;
+  }
   
   console.log("[API] Using API URL:", apiUrl);
   
