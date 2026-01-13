@@ -1,10 +1,9 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 /**
- * The PingPoint backend API URL
- * This is the real backend server that handles driver load data
+ * Default PingPoint backend API URL for production
  */
-const PINGPOINT_API_URL = "https://6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev";
+const DEFAULT_PINGPOINT_API_URL = "https://6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev";
 
 /**
  * Gets the base URL for the Express API server
@@ -18,9 +17,22 @@ export function getApiUrl(): string {
     return apiUrlOverride;
   }
 
-  // Use the PingPoint backend URL
-  console.log("[API] Using PingPoint API URL:", PINGPOINT_API_URL);
-  return PINGPOINT_API_URL;
+  // Check for development domain
+  const domain = process.env.EXPO_PUBLIC_DOMAIN;
+  if (domain) {
+    let apiUrl: string;
+    if (domain.includes(":")) {
+      apiUrl = `https://${domain}`;
+    } else {
+      apiUrl = `https://${domain}:5000`;
+    }
+    console.log("[API] Using domain-based API URL:", apiUrl);
+    return apiUrl;
+  }
+
+  // Fallback to default PingPoint backend
+  console.log("[API] Using default PingPoint API URL:", DEFAULT_PINGPOINT_API_URL);
+  return DEFAULT_PINGPOINT_API_URL;
 }
 
 async function throwIfResNotOk(res: Response) {

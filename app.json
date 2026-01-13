@@ -12,12 +12,12 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.pingpoint.driver",
       "associatedDomains": [
-        "applinks:6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev",
-        "applinks:*.replit.dev"
+        "applinks:6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev"
       ],
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "PingPoint Driver needs your location to track deliveries and share your position with dispatchers.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "PingPoint Driver needs background location access to continue tracking while you're driving."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "PingPoint Driver needs background location access to continue tracking while you're driving.",
+        "UIBackgroundModes": ["location"]
       }
     },
     "android": {
@@ -40,11 +40,6 @@
           "data": [
             {
               "scheme": "https",
-              "host": "*.replit.dev",
-              "pathPrefix": "/driver"
-            },
-            {
-              "scheme": "https",
               "host": "6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev",
               "pathPrefix": "/driver"
             }
@@ -56,7 +51,6 @@
           "data": [
             {
               "scheme": "pingpoint",
-              "host": "*",
               "pathPrefix": "/driver"
             }
           ],
