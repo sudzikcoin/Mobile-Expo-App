@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ActivityIndicator, Platform, Linking } from "react-native";
+import React from "react";
+import { View, StyleSheet, ActivityIndicator, Pressable, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -7,16 +7,24 @@ import * as Haptics from "expo-haptics";
 import { ThemedText } from "@/components/ThemedText";
 import { PingPointColors, Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { useAppTheme } from "@/lib/theme-context";
+import { useDriver } from "@/lib/driver-context";
 
 interface WelcomeScreenProps {
   isLoading: boolean;
-  onManualToken?: (token: string) => void;
 }
 
 export default function WelcomeScreen({ isLoading }: WelcomeScreenProps) {
   const insets = useSafeAreaInsets();
   const { appTheme } = useAppTheme();
+  const { setToken } = useDriver();
   const isArcade = appTheme === "arcade";
+
+  const handleDemoLogin = async () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    await setToken("demo");
+  };
 
   return (
     <View
@@ -46,6 +54,18 @@ export default function WelcomeScreen({ isLoading }: WelcomeScreenProps) {
               <ThemedText style={styles.hint}>
                 Open the driver link sent by your dispatcher to get started.
               </ThemedText>
+
+              <Pressable
+                onPress={handleDemoLogin}
+                style={({ pressed }) => [
+                  styles.demoButton,
+                  isArcade && styles.demoButtonArcade,
+                  pressed && styles.demoButtonPressed,
+                ]}
+              >
+                <Feather name="play" size={18} color={PingPointColors.background} />
+                <ThemedText style={styles.demoButtonText}>Try Demo</ThemedText>
+              </Pressable>
             </>
           )}
         </View>
@@ -114,6 +134,29 @@ const styles = StyleSheet.create({
     color: PingPointColors.textMuted,
     textAlign: "center",
     marginTop: Spacing.sm,
+  },
+  demoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    backgroundColor: PingPointColors.cyan,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing["2xl"],
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing["2xl"],
+  },
+  demoButtonArcade: {
+    ...Shadows.arcade.cyan,
+  },
+  demoButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  demoButtonText: {
+    ...Typography.button,
+    color: PingPointColors.background,
+    textTransform: "uppercase",
   },
   footer: {
     alignItems: "center",
