@@ -22,7 +22,7 @@ Preferred communication style: Simple, everyday language.
 - Main screens: Dashboard, History, Logs, Settings
 - Deep linking configured for:
   - `pingpoint://driver/:token` (custom scheme)
-  - `https://6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev/driver/:token` (production)
+  - `https://pingpoint.suverse.io/driver/:token` (production)
 - Token format: `drv_[unique_id]`
 
 **State Management**:
@@ -85,5 +85,5 @@ Preferred communication style: Simple, everyday language.
 **Environment Variables**:
 - `DATABASE_URL` - PostgreSQL connection string
 - `EXPO_PUBLIC_DOMAIN` - API base URL for client
-- `EXPO_PUBLIC_API_URL` - PingPoint backend API URL (currently: https://6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev)
+- `EXPO_PUBLIC_API_URL` - PingPoint backend API URL (currently: https://pingpoint.suverse.io)
 - `REPLIT_DEV_DOMAIN` - Development domain for CORS

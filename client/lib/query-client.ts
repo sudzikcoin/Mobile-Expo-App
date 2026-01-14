@@ -3,7 +3,7 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 /**
  * Default PingPoint backend API URL for production
  */
-const DEFAULT_PINGPOINT_API_URL = "https://6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev";
+const DEFAULT_PINGPOINT_API_URL = "https://pingpoint.suverse.io";
 
 /**
  * Gets the base URL for the Express API server
