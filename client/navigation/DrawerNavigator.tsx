@@ -13,14 +13,12 @@ import DashboardScreen from "@/screens/DashboardScreen";
 import HistoryScreen from "@/screens/HistoryScreen";
 import LogsScreen from "@/screens/LogsScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
-import LoadDetailsScreen from "@/screens/LoadDetailsScreen";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { ThemedText } from "@/components/ThemedText";
 import { useAppTheme } from "@/lib/theme-context";
 
 export type DrawerParamList = {
   Dashboard: { token?: string } | undefined;
-  LoadDetails: { loadId: string };
   History: undefined;
   Logs: undefined;
   Settings: undefined;
@@ -125,18 +123,6 @@ export default function DrawerNavigator() {
           drawerIcon: ({ color, size }) => (
             <Feather name="settings" size={size} color={color} />
           ),
-        }}
-      />
-      <Drawer.Screen
-        name="LoadDetails"
-        component={LoadDetailsScreen}
-        options={{
-          drawerLabel: "Load",
-          drawerIcon: ({ color, size }) => (
-            <Feather name="package" size={size} color={color} />
-          ),
-          headerShown: false,
-          swipeEnabled: true,
         }}
       />
     </Drawer.Navigator>

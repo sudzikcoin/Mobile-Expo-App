@@ -21,10 +21,8 @@ Preferred communication style: Simple, everyday language.
 - Root Stack Navigator wraps a Drawer Navigator
 - Main screens: Dashboard, History, Logs, Settings
 - Deep linking configured for:
-  - `pingpoint://driver/:token` (custom scheme) - opens Dashboard with driver token
-  - `pingpoint://loads/:loadId` (custom scheme) - opens LoadDetails screen
+  - `pingpoint://driver/:token` (custom scheme)
   - `https://pingpoint.suverse.io/driver/:token` (production)
-  - `https://pingpoint.suverse.io/loads/:loadId` (production)
 - Token format: `drv_[unique_id]`
 
 **State Management**:
