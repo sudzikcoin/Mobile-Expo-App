@@ -76,3 +76,4 @@ ensurePreviewReachable = "/status"
 [userenv]
 
 [userenv.shared]
+EXPO_PUBLIC_API_URL = "https://pingpoint.suverse.io"

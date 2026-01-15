@@ -87,5 +87,5 @@ Preferred communication style: Simple, everyday language.
 **Environment Variables**:
 - `DATABASE_URL` - PostgreSQL connection string
 - `EXPO_PUBLIC_DOMAIN` - API base URL for client
-- `EXPO_PUBLIC_API_URL` - Optional API URL override (if not set, uses EXPO_PUBLIC_DOMAIN-based URL)
+- `EXPO_PUBLIC_API_URL` - PingPoint backend API URL (currently: https://pingpoint.suverse.io)
 - `REPLIT_DEV_DOMAIN` - Development domain for CORS
