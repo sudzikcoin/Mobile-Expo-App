@@ -1,3 +1,16 @@
+# Обновления для client/navigation/DrawerNavigator.tsx
+
+## Шаг 1: Добавить импорт LoadDetailsScreen
+
+В начало файла добавь:
+
+```typescript
+import LoadDetailsScreen from "@/screens/LoadDetailsScreen";
+```
+
+Полная секция импортов должна выглядеть так:
+
+```typescript
 import React from "react";
 import {
   createDrawerNavigator,
@@ -13,47 +26,73 @@ import DashboardScreen from "@/screens/DashboardScreen";
 import HistoryScreen from "@/screens/HistoryScreen";
 import LogsScreen from "@/screens/LogsScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
-import LoadDetailsScreen from "@/screens/LoadDetailsScreen";
+import LoadDetailsScreen from "@/screens/LoadDetailsScreen"; // ← ДОБАВИТЬ ЭТО
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { ThemedText } from "@/components/ThemedText";
 import { useAppTheme } from "@/lib/theme-context";
+```
 
+## Шаг 2: Обновить DrawerParamList
+
+Замени это:
+
+```typescript
 export type DrawerParamList = {
   Dashboard: { token?: string } | undefined;
-  LoadDetails: { loadId: string };
   History: undefined;
   Logs: undefined;
   Settings: undefined;
 };
+```
 
+На это:
+
+```typescript
+export type DrawerParamList = {
+  Dashboard: { token?: string } | undefined;
+  LoadDetails: { loadId: string }; // ← ДОБАВИТЬ ЭТО
+  History: undefined;
+  Logs: undefined;
+  Settings: undefined;
+};
+```
+
+## Шаг 3: Обновить type параметр Drawer.Navigator
+
+Замени это:
+
+```typescript
 const Drawer = createDrawerNavigator<DrawerParamList>();
+```
 
-function CustomDrawerContent(props: DrawerContentComponentProps) {
-  const insets = useSafeAreaInsets();
-  const { appTheme } = useAppTheme();
+На это (без изменений, просто убедись что соответствует):
 
-  return (
-    <DrawerContentScrollView
-      {...props}
-      contentContainerStyle={[
-        styles.drawerContent,
-        { paddingTop: insets.top + Spacing.lg },
-      ]}
-    >
-      <View style={styles.drawerHeader}>
-        <ThemedText style={styles.drawerTitle}>PINGPOINT</ThemedText>
-        <ThemedText style={styles.drawerSubtitle}>DRIVER</ThemedText>
-        <View style={styles.themeBadge}>
-          <ThemedText style={styles.themeBadgeText}>
-            {appTheme === "arcade" ? "ARCADE 90s" : "PREMIUM"}
-          </ThemedText>
-        </View>
-      </View>
-      <DrawerItemList {...props} />
-    </DrawerContentScrollView>
-  );
-}
+```typescript
+const Drawer = createDrawerNavigator<DrawerParamList>();
+```
 
+## Шаг 4: Добавить новый Drawer.Screen для LoadDetails
+
+После `<Drawer.Screen name="Settings"...>` добавь:
+
+```typescript
+      <Drawer.Screen
+        name="LoadDetails"
+        component={LoadDetailsScreen}
+        options={{
+          drawerLabel: "Load",
+          drawerIcon: ({ color, size }) => (
+            <Feather name="package" size={size} color={color} />
+          ),
+          headerShown: false,
+          swipeEnabled: true,
+        }}
+      />
+```
+
+## Полная структура Drawer.Navigator должна быть:
+
+```typescript
 export default function DrawerNavigator() {
   const { appTheme } = useAppTheme();
   const isArcade = appTheme === "arcade";
@@ -142,43 +181,8 @@ export default function DrawerNavigator() {
     </Drawer.Navigator>
   );
 }
+```
 
-const styles = StyleSheet.create({
-  drawerContent: {
-    flex: 1,
-  },
-  drawerHeader: {
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing["2xl"],
-    borderBottomWidth: 1,
-    borderBottomColor: PingPointColors.border,
-    marginBottom: Spacing.lg,
-  },
-  drawerTitle: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: PingPointColors.cyan,
-    letterSpacing: 2,
-  },
-  drawerSubtitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: PingPointColors.textSecondary,
-    letterSpacing: 4,
-    marginTop: -4,
-  },
-  themeBadge: {
-    marginTop: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    backgroundColor: "rgba(0, 217, 255, 0.1)",
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: PingPointColors.cyan,
-    alignSelf: "flex-start",
-  },
-  themeBadgeText: {
-    ...Typography.badge,
-    color: PingPointColors.cyan,
-  },
-});
+## Финальная версия типов и структуры готова!
+
+Просто скопируй эти обновления в свой DrawerNavigator.tsx файл.

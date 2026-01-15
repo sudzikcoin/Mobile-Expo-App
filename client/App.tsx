@@ -27,7 +27,24 @@ const linking: LinkingOptions<RootStackParamList> = {
     screens: {
       Main: {
         screens: {
-          Dashboard: "driver/:token",
+          Dashboard: {
+            path: "driver/:token",
+            parse: {
+              token: (token: string) => token,
+            },
+            stringify: {
+              token: (token: string) => token,
+            },
+          },
+          LoadDetails: {
+            path: "loads/:loadId",
+            parse: {
+              loadId: (loadId: string) => loadId,
+            },
+            stringify: {
+              loadId: (loadId: string) => loadId,
+            },
+          },
         },
       },
     },
@@ -35,6 +52,18 @@ const linking: LinkingOptions<RootStackParamList> = {
 };
 
 export default function App() {
+  React.useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      console.log("[App] Deep link received:", event.url);
+    };
+
+    const listener = Linking.addEventListener("url", handleDeepLink);
+
+    return () => {
+      listener.remove();
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
       <ThemeProvider>

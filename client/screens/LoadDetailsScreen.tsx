@@ -1,0 +1,559 @@
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  Pressable,
+  Platform,
+} from "react-native";
+import { useRoute, useNavigation, RouteProp } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+
+import { ThemedText } from "@/components/ThemedText";
+import { PingPointColors, Spacing, BorderRadius } from "@/constants/theme";
+import type { DrawerParamList } from "@/navigation/DrawerNavigator";
+
+interface Load {
+  id: string;
+  origin: string;
+  destination: string;
+  rate: number;
+  commodity: string;
+  weight: number;
+  equipmentType: string;
+  brokerName: string;
+  brokerPhone?: string;
+  brokerEmail?: string;
+  pickupTime?: string;
+  deliveryTime?: string;
+  status: "available" | "accepted" | "in_transit" | "completed";
+  createdAt?: string;
+  estimatedMiles?: number;
+}
+
+type LoadDetailsRouteProp = RouteProp<DrawerParamList, "LoadDetails">;
+
+export default function LoadDetailsScreen() {
+  const route = useRoute<LoadDetailsRouteProp>();
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+
+  const [load, setLoad] = useState<Load | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isAccepting, setIsAccepting] = useState(false);
+
+  const loadId = route.params?.loadId;
+
+  useEffect(() => {
+    if (!loadId) {
+      setError("No load ID provided");
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchLoad = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        console.log("[LoadDetails] Fetching load:", loadId);
+
+        const response = await fetch(
+          `https://pingpoint.suverse.io/api/loads/${loadId}`
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch load: ${response.status} ${response.statusText}`
+          );
+        }
+
+        const data = await response.json();
+        console.log("[LoadDetails] Load fetched successfully:", data);
+        setLoad(data);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : "Unknown error";
+        setError(errorMsg);
+        console.error("[LoadDetails] Error fetching load:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchLoad();
+  }, [loadId]);
+
+  const handleAcceptLoad = async () => {
+    if (!load) return;
+
+    try {
+      setIsAccepting(true);
+
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+
+      console.log("[LoadDetails] Accepting load:", load.id);
+
+      const response = await fetch(
+        `https://pingpoint.suverse.io/api/loads/${load.id}/accept`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            timestamp: new Date().toISOString(),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.message || `Failed to accept load: ${response.statusText}`
+        );
+      }
+
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      console.log("[LoadDetails] Load accepted successfully");
+
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: "Main" as never,
+            params: {
+              screen: "Dashboard",
+            } as never,
+          },
+        ],
+      });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to accept load";
+      setError(errorMsg);
+      console.error("[LoadDetails] Error accepting load:", err);
+
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    } finally {
+      setIsAccepting(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={PingPointColors.cyan} />
+        <ThemedText style={styles.loadingText}>Loading load...</ThemedText>
+      </View>
+    );
+  }
+
+  if (error || !load) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Feather name="alert-circle" size={48} color={PingPointColors.error} />
+        <ThemedText style={styles.errorText}>
+          {error || "Load not found"}
+        </ThemedText>
+        <Pressable
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <ThemedText style={styles.backButtonText}>Go Back</ThemedText>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={({ pressed }) => [
+            styles.backIcon,
+            pressed && { opacity: 0.6 },
+          ]}
+        >
+          <Feather name="chevron-left" size={28} color={PingPointColors.cyan} />
+        </Pressable>
+        <ThemedText style={styles.headerTitle}>LOAD DETAILS</ThemedText>
+        <View style={{ width: 44 }} />
+      </View>
+
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.routeCard}>
+          <View style={styles.locationRow}>
+            <View style={[styles.locationIcon, styles.pickupIcon]}>
+              <Feather
+                name="map-pin"
+                size={20}
+                color={PingPointColors.success}
+              />
+            </View>
+            <View style={styles.locationInfo}>
+              <ThemedText style={styles.label}>PICKUP</ThemedText>
+              <ThemedText style={styles.locationText}>{load.origin}</ThemedText>
+              {load.pickupTime ? (
+                <ThemedText style={styles.timeText}>{load.pickupTime}</ThemedText>
+              ) : null}
+            </View>
+          </View>
+
+          <View style={styles.routeDivider} />
+
+          <View style={styles.locationRow}>
+            <View style={[styles.locationIcon, styles.deliveryIcon]}>
+              <Feather name="flag" size={20} color={PingPointColors.error} />
+            </View>
+            <View style={styles.locationInfo}>
+              <ThemedText style={styles.label}>DELIVERY</ThemedText>
+              <ThemedText style={styles.locationText}>
+                {load.destination}
+              </ThemedText>
+              {load.deliveryTime ? (
+                <ThemedText style={styles.timeText}>{load.deliveryTime}</ThemedText>
+              ) : null}
+            </View>
+          </View>
+
+          {load.estimatedMiles ? (
+            <View style={styles.milesInfo}>
+              <Feather name="navigation" size={16} color={PingPointColors.cyan} />
+              <ThemedText style={styles.milesText}>
+                ~{load.estimatedMiles} miles
+              </ThemedText>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.infoCard}>
+          <ThemedText style={styles.cardTitle}>COMMERCIAL INFO</ThemedText>
+
+          <View style={styles.infoRow}>
+            <ThemedText style={styles.infoLabel}>Rate</ThemedText>
+            <ThemedText style={styles.rateValue}>${load.rate}</ThemedText>
+          </View>
+
+          <View style={styles.infoRow}>
+            <ThemedText style={styles.infoLabel}>Commodity</ThemedText>
+            <ThemedText style={styles.infoValue}>{load.commodity}</ThemedText>
+          </View>
+
+          <View style={styles.infoRow}>
+            <ThemedText style={styles.infoLabel}>Weight</ThemedText>
+            <ThemedText style={styles.infoValue}>
+              {(load.weight / 1000).toFixed(1)} tons
+            </ThemedText>
+          </View>
+
+          <View style={styles.infoRow}>
+            <ThemedText style={styles.infoLabel}>Equipment</ThemedText>
+            <ThemedText style={styles.infoValue}>{load.equipmentType}</ThemedText>
+          </View>
+        </View>
+
+        <View style={styles.infoCard}>
+          <ThemedText style={styles.cardTitle}>BROKER</ThemedText>
+
+          <View style={styles.infoRow}>
+            <ThemedText style={styles.infoLabel}>Company</ThemedText>
+            <ThemedText style={styles.infoValue}>{load.brokerName}</ThemedText>
+          </View>
+
+          {load.brokerPhone ? (
+            <View style={styles.infoRow}>
+              <ThemedText style={styles.infoLabel}>Phone</ThemedText>
+              <Pressable>
+                <ThemedText style={[styles.infoValue, styles.linkText]}>
+                  {load.brokerPhone}
+                </ThemedText>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {load.brokerEmail ? (
+            <View style={styles.infoRow}>
+              <ThemedText style={styles.infoLabel}>Email</ThemedText>
+              <Pressable>
+                <ThemedText style={[styles.infoValue, styles.linkText]}>
+                  {load.brokerEmail}
+                </ThemedText>
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+
+        <View
+          style={[
+            styles.statusBadge,
+            load.status === "available" && styles.statusAvailable,
+            load.status === "accepted" && styles.statusAccepted,
+            load.status === "in_transit" && styles.statusInTransit,
+            load.status === "completed" && styles.statusCompleted,
+          ]}
+        >
+          <ThemedText style={styles.statusText}>
+            Status: {load.status.toUpperCase().replace("_", " ")}
+          </ThemedText>
+        </View>
+      </ScrollView>
+
+      {load.status === "available" ? (
+        <Pressable
+          style={[
+            styles.acceptButton,
+            isAccepting && styles.acceptButtonDisabled,
+          ]}
+          onPress={handleAcceptLoad}
+          disabled={isAccepting}
+        >
+          {isAccepting ? (
+            <ActivityIndicator size="small" color="#000" />
+          ) : (
+            <>
+              <Feather name="check-circle" size={20} color="#000" />
+              <ThemedText style={styles.acceptButtonText}>Accept Load</ThemedText>
+            </>
+          )}
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: PingPointColors.background,
+  },
+  centerContent: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: Spacing.lg,
+    color: PingPointColors.textSecondary,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: PingPointColors.border,
+  },
+  backIcon: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: PingPointColors.cyan,
+    letterSpacing: 1.5,
+  },
+  content: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: Spacing.lg,
+    paddingBottom: Spacing["4xl"],
+  },
+  routeCard: {
+    backgroundColor: PingPointColors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: PingPointColors.border,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  locationIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.sm,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: Spacing.md,
+    marginTop: 2,
+  },
+  pickupIcon: {
+    backgroundColor: "rgba(76, 175, 80, 0.15)",
+  },
+  deliveryIcon: {
+    backgroundColor: "rgba(244, 67, 54, 0.15)",
+  },
+  locationInfo: {
+    flex: 1,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: PingPointColors.textSecondary,
+    marginBottom: Spacing.xs,
+    letterSpacing: 0.5,
+  },
+  locationText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: PingPointColors.textPrimary,
+    marginBottom: Spacing.xs,
+  },
+  timeText: {
+    fontSize: 12,
+    color: PingPointColors.cyan,
+    fontWeight: "500",
+  },
+  routeDivider: {
+    height: 1,
+    backgroundColor: PingPointColors.border,
+    marginVertical: Spacing.lg,
+    marginLeft: 44 + Spacing.md,
+  },
+  milesInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: Spacing.lg,
+    paddingTop: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: PingPointColors.border,
+  },
+  milesText: {
+    marginLeft: Spacing.sm,
+    color: PingPointColors.cyan,
+    fontWeight: "600",
+  },
+  infoCard: {
+    backgroundColor: PingPointColors.surface,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: PingPointColors.border,
+  },
+  cardTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: PingPointColors.cyan,
+    marginBottom: Spacing.md,
+    letterSpacing: 1,
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: Spacing.md,
+  },
+  infoLabel: {
+    fontSize: 13,
+    color: PingPointColors.textSecondary,
+    fontWeight: "500",
+  },
+  infoValue: {
+    fontSize: 13,
+    color: PingPointColors.textPrimary,
+    fontWeight: "600",
+    textAlign: "right",
+  },
+  linkText: {
+    color: PingPointColors.cyan,
+  },
+  rateValue: {
+    fontSize: 18,
+    color: PingPointColors.success,
+    fontWeight: "700",
+  },
+  statusBadge: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    alignItems: "center",
+  },
+  statusAvailable: {
+    borderColor: PingPointColors.success,
+    backgroundColor: "rgba(76, 175, 80, 0.1)",
+    borderWidth: 1,
+  },
+  statusAccepted: {
+    borderColor: PingPointColors.cyan,
+    backgroundColor: "rgba(0, 217, 255, 0.1)",
+    borderWidth: 1,
+  },
+  statusInTransit: {
+    borderColor: PingPointColors.warning,
+    backgroundColor: "rgba(255, 193, 7, 0.1)",
+    borderWidth: 1,
+  },
+  statusCompleted: {
+    borderColor: PingPointColors.textSecondary,
+    backgroundColor: "rgba(158, 158, 158, 0.1)",
+    borderWidth: 1,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: PingPointColors.textPrimary,
+    textAlign: "center",
+  },
+  acceptButton: {
+    flexDirection: "row",
+    backgroundColor: PingPointColors.success,
+    padding: Spacing.lg,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.xl,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.md,
+  },
+  acceptButtonDisabled: {
+    opacity: 0.7,
+  },
+  acceptButtonText: {
+    color: "#000",
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  backButton: {
+    marginTop: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 2,
+    borderColor: PingPointColors.cyan,
+  },
+  backButtonText: {
+    color: PingPointColors.cyan,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  errorText: {
+    marginTop: Spacing.lg,
+    fontSize: 16,
+    textAlign: "center",
+    color: PingPointColors.error,
+    marginHorizontal: Spacing.lg,
+  },
+});
