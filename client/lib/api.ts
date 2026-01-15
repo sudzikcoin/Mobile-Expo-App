@@ -181,45 +181,21 @@ export async function markStopArrival(
   stopId: string
 ): Promise<ActionResponse> {
   try {
-    const url = `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/arrive`;
-    console.log("[API] Marking stop arrival:", url);
-    
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      body: JSON.stringify({
-        timestamp: new Date().toISOString(),
-      }),
-    });
-
-    console.log("[API] Arrive response status:", response.status);
-    
-    const contentType = response.headers.get("content-type") || "";
-    const responseText = await response.text();
-    
-    console.log("[API] Arrive response preview:", responseText.substring(0, 200));
-    
-    if (!response.ok) {
-      let errorMessage = `API error: ${response.status}`;
-      if (contentType.includes("application/json") && responseText) {
-        try {
-          const errorData = JSON.parse(responseText);
-          errorMessage = errorData.message || errorData.error || errorMessage;
-        } catch {}
+    const response = await fetch(
+      `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/arrive`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
       }
-      throw new Error(errorMessage);
+    );
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
     }
 
-    if (!contentType.includes("application/json")) {
-      console.warn("[API] Non-JSON response for arrival, content-type:", contentType);
-      throw new Error("Server returned invalid response format");
-    }
-
-    const result = JSON.parse(responseText);
-    return result;
+    return await response.json();
   } catch (error) {
     console.error("Failed to mark stop arrival:", error);
     throw error;
@@ -231,45 +207,21 @@ export async function markStopDeparture(
   stopId: string
 ): Promise<ActionResponse> {
   try {
-    const url = `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/depart`;
-    console.log("[API] Marking stop departure:", url);
-    
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      body: JSON.stringify({
-        timestamp: new Date().toISOString(),
-      }),
-    });
-
-    console.log("[API] Depart response status:", response.status);
-    
-    const contentType = response.headers.get("content-type") || "";
-    const responseText = await response.text();
-    
-    console.log("[API] Depart response preview:", responseText.substring(0, 200));
-    
-    if (!response.ok) {
-      let errorMessage = `API error: ${response.status}`;
-      if (contentType.includes("application/json") && responseText) {
-        try {
-          const errorData = JSON.parse(responseText);
-          errorMessage = errorData.message || errorData.error || errorMessage;
-        } catch {}
+    const response = await fetch(
+      `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/depart`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
       }
-      throw new Error(errorMessage);
+    );
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
     }
 
-    if (!contentType.includes("application/json")) {
-      console.warn("[API] Non-JSON response for departure, content-type:", contentType);
-      throw new Error("Server returned invalid response format");
-    }
-
-    const result = JSON.parse(responseText);
-    return result;
+    return await response.json();
   } catch (error) {
     console.error("Failed to mark stop departure:", error);
     throw error;
