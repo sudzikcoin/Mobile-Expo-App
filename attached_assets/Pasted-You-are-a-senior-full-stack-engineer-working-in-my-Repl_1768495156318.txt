@@ -1,0 +1,82 @@
+You are a senior full-stack engineer working in my Replit workspace. Goal: FIX PingPoint Driver App (Expo / React Native) so Arrive/Depart buttons work in Expo Go deep links like exp://.../--/driver/drv_xxx by ensuring ALL mobile API calls use PRODUCTION API (https://pingpoint.suverse.io/api) and never point to localhost or *.replit.dev.
+
+CRITICAL CONSTRAINTS
+- Make minimal, localized changes. Do NOT refactor the whole app.
+- Do NOT break existing web app or broker console.
+- Do NOT change database schemas or server logic unless absolutely necessary.
+- Focus only on the Driver App project (Expo / React Native).
+- Add debug logging so we can confirm the exact request URL and response status/body (first 300 chars) for Arrive/Depart.
+- The current error is: "JSON Parse error: Unexpected character: <" which indicates the mobile app is receiving HTML instead of JSON (likely wrong base URL or a 503/HTML page).
+- After changes, Arrive/Depart must call production endpoints and receive JSON.
+
+WHAT YOU MUST DO (STEP BY STEP)
+1) Locate where the Driver app defines/uses the API base URL.
+   - Search the codebase for: EXPO_PUBLIC_API_URL, API_URL, BASE_URL, localhost, replit.dev, pingpoint.suverse.io, fetch(, axios, ky, apiClient, client.ts, api.ts.
+   - Identify the single source of truth (preferred) or multiple (fix them).
+
+2) Enforce a single source of truth for API base URL:
+   - Create or update one module (preferred: src/lib/apiClient.ts or src/api/client.ts) that exports:
+     - getApiBaseUrl(): string
+     - apiFetch(path: string, options?: RequestInit): Promise<any>
+   - getApiBaseUrl must choose production by default:
+     - Use process.env.EXPO_PUBLIC_API_URL if set
+     - Otherwise fallback to "https://pingpoint.suverse.io/api"
+   - Ensure the base always ends with "/api" (no double slashes).
+   - Ensure path join is correct ("/api" + "/driver/arrive" etc).
+
+3) Update all driver actions to use this unified client:
+   - Find functions for Arrive/Depart (arriveStop, departStop, updateStopStatus, driverArrive, driverDepart, etc).
+   - Replace direct fetch/axios baseUrl construction with apiFetch("/driver/arrive", {method:"POST", ...}) (or whatever the actual route is in this repo).
+   - Do the same for Depart.
+   - Do NOT change endpoint paths unless you verify they are wrong. (We already saw /api/driver/arrive returned 404 when called with GET in server shell. Arrive/Depart likely require POST and a different path like /api/driver/stops/:stopId/arrive or /api/loads/:loadId/stops/:stopId/arrive. Confirm by searching the backend routes referenced by the mobile app and matching them.)
+
+4) Fix Env setup in Replit so Expo Go uses production:
+   - Add an .env file (or app.config.ts usage) so Expo sees EXPO_PUBLIC_API_URL.
+   - In Replit Secrets/Env, ensure EXPO_PUBLIC_API_URL is set to:
+     EXPO_PUBLIC_API_URL=https://pingpoint.suverse.io/api
+   - If the project uses app.json/app.config.ts, confirm extra/public env mapping is correct.
+   - Ensure the app reads process.env.EXPO_PUBLIC_API_URL at runtime in Expo.
+
+5) Add targeted debug logging:
+   - Before each Arrive/Depart request, log:
+     - full URL
+     - method
+     - important ids (loadId/stopId/driverId) but do NOT log tokens
+   - After response, log:
+     - status code
+     - content-type
+     - first 300 chars of response text
+   - If content-type includes text/html or response starts with "<", throw a clear error:
+     "Expected JSON but received HTML. Check API base URL / proxy."
+   - Make sure this error surfaces to UI as "Failed to arrive/depart" plus a short hint.
+
+6) Validate the correct endpoint and method:
+   - Identify what Arrive/Depart endpoint should be by checking:
+     - existing mobile code (current endpoints)
+     - any backend route definitions (server routes) if present in repo
+   - Ensure Arrive uses POST (likely) with JSON body and correct headers:
+     - "Content-Type: application/json"
+     - include Authorization header if app uses bearer token
+   - If the backend expects cookies/sessions, keep credentials behavior consistent.
+   - If the mobile app uses JWT, ensure the token is passed exactly as before.
+
+7) Make sure deep links remain working:
+   - Do not break linking configuration.
+   - No changes required there unless you find it’s interfering with env.
+
+8) Provide a quick verification plan:
+   - Run the app
+   - Trigger Arrive/Depart in Expo Go
+   - Confirm logs show URL starts with https://pingpoint.suverse.io/api
+   - Confirm response is JSON and broker console receives events
+
+DELIVERABLES
+- Commit changes in the Replit project.
+- Output a concise summary:
+  - which file defines base URL now
+  - what env variable is used
+  - which Arrive/Depart functions were updated
+  - one example log line showing correct URL
+- Do NOT ask me questions unless you are blocked; instead, make best assumptions and implement.
+
+IMPORTANT: Minimal changes, but must fully fix Arrive/Depart in Expo Go by forcing production API usage and preventing HTML responses from wrong hosts.

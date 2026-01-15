@@ -1,9 +1,12 @@
 import { getApiUrl } from "@/lib/query-client";
 import { Load, Stop, LoadStatus, StopStatus, StopType } from "./types";
 
+const PRODUCTION_API_BASE = "https://pingpoint.suverse.io";
+
 const API_BASE_URL = getApiUrl();
 
 console.log("[API Client] Initialized with base URL:", API_BASE_URL);
+console.log("[API Client] Production fallback URL:", PRODUCTION_API_BASE);
 
 interface APIStop {
   id: string;
@@ -45,6 +48,14 @@ interface ActionResponse {
   success: boolean;
   pointsAwarded: number;
   newBalance: number;
+}
+
+function getProductionApiUrl(): string {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl && envUrl.includes("pingpoint.suverse.io")) {
+    return envUrl;
+  }
+  return PRODUCTION_API_BASE;
 }
 
 function mapStopStatus(status: string): StopStatus {
@@ -100,8 +111,40 @@ function transformAPIResponse(data: APILoadResponse): { load: Load; balance: num
   return { load, balance: data.rewardBalance };
 }
 
+async function handleApiResponse<T>(
+  response: Response,
+  action: string
+): Promise<T> {
+  const contentType = response.headers.get("content-type") || "";
+  const text = await response.text();
+  
+  console.log(`[API] ${action} - Status:`, response.status);
+  console.log(`[API] ${action} - Content-Type:`, contentType);
+  console.log(`[API] ${action} - Response preview:`, text.substring(0, 300));
+
+  if (text.startsWith("<!") || text.startsWith("<html") || contentType.includes("text/html")) {
+    console.error(`[API] ${action} - ERROR: Received HTML instead of JSON`);
+    throw new Error(
+      `Expected JSON but received HTML. Check API base URL. Status: ${response.status}`
+    );
+  }
+
+  if (!response.ok) {
+    console.error(`[API] ${action} - ERROR: Status ${response.status}`);
+    throw new Error(`API error: ${response.status} - ${text.substring(0, 100)}`);
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch (parseError) {
+    console.error(`[API] ${action} - JSON parse error:`, parseError);
+    throw new Error(`Failed to parse JSON response: ${text.substring(0, 100)}`);
+  }
+}
+
 export async function fetchDriverLoad(token: string): Promise<{ load: Load; balance: number } | null> {
-  const url = `${API_BASE_URL}/api/driver/${token}`;
+  const baseUrl = getProductionApiUrl();
+  const url = `${baseUrl}/api/driver/${token}`;
   console.log("[API] Fetching driver load from:", url);
   
   try {
@@ -127,10 +170,9 @@ export async function fetchDriverLoad(token: string): Promise<{ load: Load; bala
       throw new Error(`API error: ${response.status}`);
     }
 
-    // Check if response is HTML instead of JSON
     if (text.startsWith("<!") || text.startsWith("<html")) {
       console.error("[API] Received HTML instead of JSON");
-      throw new Error("Server returned HTML instead of JSON");
+      throw new Error("Server returned HTML instead of JSON. Check API URL.");
     }
 
     const data: APILoadResponse = JSON.parse(text);
@@ -147,12 +189,18 @@ export async function sendLocationPing(
   payload: PingPayload,
   retries = 3
 ): Promise<boolean> {
+  const baseUrl = getProductionApiUrl();
+  
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/driver/${token}/ping`, {
+      const url = `${baseUrl}/api/driver/${token}/ping`;
+      console.log(`[GPS] Sending ping to: ${url} (attempt ${attempt + 1})`);
+      
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Accept": "application/json",
         },
         body: JSON.stringify(payload),
       });
@@ -180,24 +228,33 @@ export async function markStopArrival(
   token: string,
   stopId: string
 ): Promise<ActionResponse> {
+  const baseUrl = getProductionApiUrl();
+  const url = `${baseUrl}/api/driver/${token}/stops/${stopId}/arrive`;
+  
+  console.log("[API] ===== ARRIVE REQUEST =====");
+  console.log("[API] Arrive - URL:", url);
+  console.log("[API] Arrive - Method: POST");
+  console.log("[API] Arrive - Token:", token.substring(0, 8) + "...");
+  console.log("[API] Arrive - StopId:", stopId);
+  console.log("[API] Arrive - Base URL used:", baseUrl);
+  
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/arrive`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        timestamp: new Date().toISOString(),
+      }),
+    });
 
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    return await response.json();
+    const result = await handleApiResponse<ActionResponse>(response, "Arrive");
+    console.log("[API] Arrive - Success! Points awarded:", result.pointsAwarded);
+    return result;
   } catch (error) {
-    console.error("Failed to mark stop arrival:", error);
+    console.error("[API] Arrive - FAILED:", error);
     throw error;
   }
 }
@@ -206,24 +263,33 @@ export async function markStopDeparture(
   token: string,
   stopId: string
 ): Promise<ActionResponse> {
+  const baseUrl = getProductionApiUrl();
+  const url = `${baseUrl}/api/driver/${token}/stops/${stopId}/depart`;
+  
+  console.log("[API] ===== DEPART REQUEST =====");
+  console.log("[API] Depart - URL:", url);
+  console.log("[API] Depart - Method: POST");
+  console.log("[API] Depart - Token:", token.substring(0, 8) + "...");
+  console.log("[API] Depart - StopId:", stopId);
+  console.log("[API] Depart - Base URL used:", baseUrl);
+  
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/depart`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        timestamp: new Date().toISOString(),
+      }),
+    });
 
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    return await response.json();
+    const result = await handleApiResponse<ActionResponse>(response, "Depart");
+    console.log("[API] Depart - Success! Points awarded:", result.pointsAwarded);
+    return result;
   } catch (error) {
-    console.error("Failed to mark stop departure:", error);
+    console.error("[API] Depart - FAILED:", error);
     throw error;
   }
 }
