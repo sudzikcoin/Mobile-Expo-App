@@ -195,25 +195,31 @@ export async function markStopArrival(
       }),
     });
 
-    const contentType = response.headers.get("content-type");
+    console.log("[API] Arrive response status:", response.status);
+    
+    const contentType = response.headers.get("content-type") || "";
+    const responseText = await response.text();
+    
+    console.log("[API] Arrive response preview:", responseText.substring(0, 200));
     
     if (!response.ok) {
       let errorMessage = `API error: ${response.status}`;
-      if (contentType?.includes("application/json")) {
+      if (contentType.includes("application/json") && responseText) {
         try {
-          const errorData = await response.json();
+          const errorData = JSON.parse(responseText);
           errorMessage = errorData.message || errorData.error || errorMessage;
         } catch {}
       }
       throw new Error(errorMessage);
     }
 
-    if (!contentType?.includes("application/json")) {
+    if (!contentType.includes("application/json")) {
       console.warn("[API] Non-JSON response for arrival, content-type:", contentType);
-      return { success: true, pointsAwarded: 5, newBalance: 0 };
+      throw new Error("Server returned invalid response format");
     }
 
-    return await response.json();
+    const result = JSON.parse(responseText);
+    return result;
   } catch (error) {
     console.error("Failed to mark stop arrival:", error);
     throw error;
@@ -239,25 +245,31 @@ export async function markStopDeparture(
       }),
     });
 
-    const contentType = response.headers.get("content-type");
+    console.log("[API] Depart response status:", response.status);
+    
+    const contentType = response.headers.get("content-type") || "";
+    const responseText = await response.text();
+    
+    console.log("[API] Depart response preview:", responseText.substring(0, 200));
     
     if (!response.ok) {
       let errorMessage = `API error: ${response.status}`;
-      if (contentType?.includes("application/json")) {
+      if (contentType.includes("application/json") && responseText) {
         try {
-          const errorData = await response.json();
+          const errorData = JSON.parse(responseText);
           errorMessage = errorData.message || errorData.error || errorMessage;
         } catch {}
       }
       throw new Error(errorMessage);
     }
 
-    if (!contentType?.includes("application/json")) {
+    if (!contentType.includes("application/json")) {
       console.warn("[API] Non-JSON response for departure, content-type:", contentType);
-      return { success: true, pointsAwarded: 5, newBalance: 0 };
+      throw new Error("Server returned invalid response format");
     }
 
-    return await response.json();
+    const result = JSON.parse(responseText);
+    return result;
   } catch (error) {
     console.error("Failed to mark stop departure:", error);
     throw error;
