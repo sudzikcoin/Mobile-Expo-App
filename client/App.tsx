@@ -21,30 +21,13 @@ const linking: LinkingOptions<RootStackParamList> = {
     Linking.createURL("/"),
     "pingpoint://",
     "https://pingpoint.app",
-    "https://pingpoint.suverse.io",
+    "https://6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev",
   ],
   config: {
     screens: {
       Main: {
         screens: {
-          Dashboard: {
-            path: "driver/:token",
-            parse: {
-              token: (token: string) => token,
-            },
-            stringify: {
-              token: (token: string) => token,
-            },
-          },
-          LoadDetails: {
-            path: "loads/:loadId",
-            parse: {
-              loadId: (loadId: string) => loadId,
-            },
-            stringify: {
-              loadId: (loadId: string) => loadId,
-            },
-          },
+          Dashboard: "driver/:token",
         },
       },
     },
@@ -52,18 +35,6 @@ const linking: LinkingOptions<RootStackParamList> = {
 };
 
 export default function App() {
-  React.useEffect(() => {
-    const handleDeepLink = (event: { url: string }) => {
-      console.log("[App] Deep link received:", event.url);
-    };
-
-    const listener = Linking.addEventListener("url", handleDeepLink);
-
-    return () => {
-      listener.remove();
-    };
-  }, []);
-
   return (
     <ErrorBoundary>
       <ThemeProvider>
