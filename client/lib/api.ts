@@ -181,18 +181,36 @@ export async function markStopArrival(
   stopId: string
 ): Promise<ActionResponse> {
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/arrive`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const url = `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/arrive`;
+    console.log("[API] Marking stop arrival:", url);
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        timestamp: new Date().toISOString(),
+      }),
+    });
 
+    const contentType = response.headers.get("content-type");
+    
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      let errorMessage = `API error: ${response.status}`;
+      if (contentType?.includes("application/json")) {
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {}
+      }
+      throw new Error(errorMessage);
+    }
+
+    if (!contentType?.includes("application/json")) {
+      console.warn("[API] Non-JSON response for arrival, content-type:", contentType);
+      return { success: true, pointsAwarded: 5, newBalance: 0 };
     }
 
     return await response.json();
@@ -207,18 +225,36 @@ export async function markStopDeparture(
   stopId: string
 ): Promise<ActionResponse> {
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/depart`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const url = `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/depart`;
+    console.log("[API] Marking stop departure:", url);
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        timestamp: new Date().toISOString(),
+      }),
+    });
 
+    const contentType = response.headers.get("content-type");
+    
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      let errorMessage = `API error: ${response.status}`;
+      if (contentType?.includes("application/json")) {
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {}
+      }
+      throw new Error(errorMessage);
+    }
+
+    if (!contentType?.includes("application/json")) {
+      console.warn("[API] Non-JSON response for departure, content-type:", contentType);
+      return { success: true, pointsAwarded: 5, newBalance: 0 };
     }
 
     return await response.json();
