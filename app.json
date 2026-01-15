@@ -12,7 +12,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.pingpoint.driver",
       "associatedDomains": [
-        "applinks:6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev"
+        "applinks:pingpoint.suverse.io"
       ],
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "PingPoint Driver needs your location to track deliveries and share your position with dispatchers.",
@@ -40,7 +40,7 @@
           "data": [
             {
               "scheme": "https",
-              "host": "6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev",
+              "host": "pingpoint.suverse.io",
               "pathPrefix": "/driver"
             }
           ],

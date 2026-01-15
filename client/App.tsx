@@ -21,7 +21,7 @@ const linking: LinkingOptions<RootStackParamList> = {
     Linking.createURL("/"),
     "pingpoint://",
     "https://pingpoint.app",
-    "https://6770693b-fc9a-4c02-9b92-87ade92b7c79-00-3kcz61rsl8wvd.worf.replit.dev",
+    "https://pingpoint.suverse.io",
   ],
   config: {
     screens: {
