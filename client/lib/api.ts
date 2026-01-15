@@ -180,24 +180,39 @@ export async function markStopArrival(
   token: string,
   stopId: string
 ): Promise<ActionResponse> {
+  const url = `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/arrive`;
+  console.log("[API] Marking stop arrival:", url);
+  
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/arrive`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+    });
+
+    const text = await response.text();
+    console.log("[API] Arrive response status:", response.status);
+    console.log("[API] Arrive response preview:", text.substring(0, 200));
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      throw new Error(`API error: ${response.status} - ${text.substring(0, 100)}`);
     }
 
-    return await response.json();
+    if (text.startsWith("<!") || text.startsWith("<html") || text.startsWith("<")) {
+      console.error("[API] Received HTML instead of JSON for arrive");
+      throw new Error("Server returned HTML instead of JSON. The endpoint may not exist.");
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (parseError) {
+      console.error("[API] Failed to parse arrive response as JSON:", text);
+      throw new Error(`Invalid JSON response: ${text.substring(0, 100)}`);
+    }
   } catch (error) {
-    console.error("Failed to mark stop arrival:", error);
+    console.error("[API] Failed to mark stop arrival:", error);
     throw error;
   }
 }
@@ -206,24 +221,39 @@ export async function markStopDeparture(
   token: string,
   stopId: string
 ): Promise<ActionResponse> {
+  const url = `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/depart`;
+  console.log("[API] Marking stop departure:", url);
+  
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/driver/${token}/stops/${stopId}/depart`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+    });
+
+    const text = await response.text();
+    console.log("[API] Depart response status:", response.status);
+    console.log("[API] Depart response preview:", text.substring(0, 200));
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      throw new Error(`API error: ${response.status} - ${text.substring(0, 100)}`);
     }
 
-    return await response.json();
+    if (text.startsWith("<!") || text.startsWith("<html") || text.startsWith("<")) {
+      console.error("[API] Received HTML instead of JSON for depart");
+      throw new Error("Server returned HTML instead of JSON. The endpoint may not exist.");
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (parseError) {
+      console.error("[API] Failed to parse depart response as JSON:", text);
+      throw new Error(`Invalid JSON response: ${text.substring(0, 100)}`);
+    }
   } catch (error) {
-    console.error("Failed to mark stop departure:", error);
+    console.error("[API] Failed to mark stop departure:", error);
     throw error;
   }
 }
