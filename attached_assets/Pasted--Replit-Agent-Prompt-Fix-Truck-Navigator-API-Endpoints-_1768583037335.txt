@@ -1,0 +1,79 @@
+# 🔧 Replit Agent Prompt - Fix Truck Navigator API Endpoints
+
+## Инструкция:
+
+1. Открой Replit AI Agent (кнопка в левом углу “Agent”)
+1. Скопируй весь текст ниже (всё что между линиями —) в чат с Agent
+1. Нажми Enter и дай ему выполниться
+1. Скажи мне что вывелось в логах
+
+-----
+
+Привет Replit Agent! Нужно срочно исправить API endpoints в Truck Navigator приложении (Mobile-Expo-App).
+
+Проблема: Когда водитель нажимает кнопки “Arrive” или “Depart” в Expo Go приложении, они отправляют запросы которые возвращают HTML вместо JSON.
+
+Задача: Нужно убедиться что ВСЕ API запросы в приложении используют ПОЛНЫЙ URL (https://pingpoint.suverse.io) вместо относительных путей.
+
+Пожалуйста сделай следующее:
+
+## ШАГ 1: НАЙТИ ВСЕ API ЗАПРОСЫ
+
+Поиск во всех TypeScript/JavaScript файлах:
+
+```bash
+grep -r "fetch\|axios\|http" client/ --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" | grep -v "node_modules" | grep -v "dist" | grep "api\|/api\|http" > /tmp/api_calls.txt
+cat /tmp/api_calls.txt
+```
+
+Также найди файлы которые работают с API:
+
+```bash
+find client -name "*api*" -o -name "*driver-context*" -o -name "*hook*" | grep -v node_modules
+```
+
+## ШАГ 2: ПРОВЕРИТЬ ЗНАЧЕНИЕ BASE_URL
+
+```bash
+grep -r "BASE_URL\|baseUrl\|API_BASE\|API_URL" client/ --include="*.ts" --include="*.tsx" | grep -v node_modules | head -20
+```
+
+## ШАГ 3: НАЙТИ КОНКРЕТНЫЕ ФУНКЦИИ ARRIVE/DEPART
+
+```bash
+grep -r "arrive\|depart\|handleStopAction" client/ --include="*.ts" --include="*.tsx" | grep -v node_modules
+```
+
+## ШАГ 4: ПРОСМОТРЕТЬ ФАЙЛ driver-context.tsx (САМЫЙ ВАЖНЫЙ)
+
+```bash
+cat client/lib/driver-context.tsx | head -100
+```
+
+## ШАГ 5: ПОКАЗАТЬ МНЕ КОД ФУНКЦИИ handleStopAction
+
+```bash
+grep -A 50 "handleStopAction\|const handleStopAction" client/lib/driver-context.tsx
+```
+
+## ШАГ 6: НАЙТИ ВСЕ МЕСТА ГДЕ ИСПОЛЬЗУЕТСЯ /api/
+
+```bash
+grep -r '"/api/' client/ --include="*.ts" --include="*.tsx" | grep -v node_modules
+```
+
+Спасибо! Выполни эти шаги и покажи мне результаты в порядке 1→2→3→4→5→6.
+
+-----
+
+## Если всё OK, то сделай финальный шаг:
+
+После выполнения всех шагов выше, если нужно исправить, вот код для обновления driver-context.tsx:
+
+Найди в файле строку где отправляется POST запрос для arrive/depart (примерно должна быть около строки 250-300) и покажи мне эту часть с контекстом (20 строк до и после).
+
+```bash
+sed -n '230,270p' client/lib/driver-context.tsx
+```
+
+Спасибо!
