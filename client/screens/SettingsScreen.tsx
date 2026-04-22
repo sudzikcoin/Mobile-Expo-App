@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React from "react";
 import { View, StyleSheet, Pressable, Platform, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -8,8 +8,9 @@ import { ThemedText } from "@/components/ThemedText";
 import ScreenHeader from "@/components/ScreenHeader";
 import { PingPointColors, Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { useAppTheme } from "@/lib/theme-context";
-import { useDriver } from "@/lib/driver-context";
-import { getTruckNumber, getDriverName } from "@/lib/storage";
+import { useNavigation } from "@react-navigation/native";
+import { useState, useEffect, useCallback } from "react";
+import { getTruckNumber, getDriverName, setTruckSetupComplete } from "@/lib/storage";
 
 interface SettingRowProps {
   icon: keyof typeof Feather.glyphMap;
@@ -90,28 +91,34 @@ function SettingRow({
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { appTheme, setAppTheme, colors, isArcade } = useAppTheme();
-  const { resetTruckSetup } = useDriver();
-
+  const navigation = useNavigation<any>();
   const [truckNumber, setTruckNumberState] = useState<string | null>(null);
   const [driverName, setDriverNameState] = useState<string | null>(null);
 
   const loadTruckInfo = useCallback(async () => {
-    const num = await getTruckNumber();
-    const name = await getDriverName();
-    setTruckNumberState(num);
-    setDriverNameState(name);
+    const t = await getTruckNumber();
+    const d = await getDriverName();
+    setTruckNumberState(t);
+    setDriverNameState(d);
   }, []);
 
   useEffect(() => {
     loadTruckInfo();
-  }, [loadTruckInfo]);
+    const unsubscribe = navigation.addListener("focus", loadTruckInfo);
+    return unsubscribe;
+  }, [navigation, loadTruckInfo]);
 
   const handleChangeTruck = async () => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    await resetTruckSetup();
+    await setTruckSetupComplete(false);
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "TruckSetup" }],
+    });
   };
+
 
   const handleThemeChange = (theme: "arcade" | "premium") => {
     console.log("[Settings] Changing theme to:", theme);
@@ -126,25 +133,6 @@ export default function SettingsScreen() {
       <ScreenHeader title="Settings" />
 
       <View style={[styles.content, { paddingBottom: insets.bottom + Spacing.xl }]}>
-        <View style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>TRUCK &amp; DRIVER</ThemedText>
-          <SettingRow
-            icon="truck"
-            label="Truck"
-            value={truckNumber ? `Truck ${truckNumber}` : "Not set"}
-          />
-          <SettingRow
-            icon="user"
-            label="Driver"
-            value={driverName ? (driverName.length > 14 ? `${driverName.slice(0, 14)}...` : driverName) : "Not set"}
-          />
-          <SettingRow
-            icon="refresh-cw"
-            label="Change Truck"
-            onPress={handleChangeTruck}
-          />
-        </View>
-
         <View style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>APPEARANCE</ThemedText>
 
@@ -212,6 +200,13 @@ export default function SettingsScreen() {
               </ThemedText>
             </Pressable>
           </View>
+        </View>
+
+        <View style={styles.section}>
+          <ThemedText style={styles.sectionTitle}>TRUCK & DRIVER</ThemedText>
+          <SettingRow icon="truck" label="Current Truck" value={truckNumber ? `#${truckNumber}` : "Not set"} />
+          <SettingRow icon="user" label="Current Driver" value={driverName || "Not set"} />
+          <SettingRow icon="refresh-cw" label="Change Truck / Driver" onPress={handleChangeTruck} />
         </View>
 
         <View style={styles.section}>

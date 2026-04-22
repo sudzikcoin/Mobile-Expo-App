@@ -1,31 +1,34 @@
-import * as TaskManager from 'expo-task-manager';
-import * as Location from 'expo-location';
-import { getDriverToken, addLog, isLocationEnabled } from './storage';
+import * as TaskManager from "expo-task-manager";
+import * as Location from "expo-location";
+import { getDriverToken, addLog, isLocationEnabled } from "./storage";
 
-const BACKGROUND_LOCATION_TASK = 'PINGPOINT_BACKGROUND_LOCATION';
+export const BACKGROUND_LOCATION_TASK = "PINGPOINT_BACKGROUND_LOCATION";
 
-TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
+const PINGPOINT_API = "https://pingpoint.suverse.io";
+
+// Определяем фоновую задачу — ДОЛЖНА быть на верхнем уровне модуля
+TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }: any) => {
   if (error) {
-    console.error('[BGTask] Error:', error);
+    console.error("[BGTask] Location task error:", error);
     return;
   }
 
   if (!data) return;
 
-  const locationEnabled = await isLocationEnabled();
-  if (!locationEnabled) return;
-
-  const token = await getDriverToken();
-  if (!token) return;
-
-  const { locations } = data as { locations: Location.LocationObject[] };
-  const location = locations[0];
-  if (!location) return;
-
   try {
-    const response = await fetch(`https://pingpoint.suverse.io/api/driver/${token}/ping`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const locationEnabled = await isLocationEnabled();
+    if (!locationEnabled) return;
+
+    const token = await getDriverToken();
+    if (!token) return;
+
+    const { locations } = data as { locations: Location.LocationObject[] };
+    const location = locations?.[0];
+    if (!location) return;
+
+    const response = await fetch(`${PINGPOINT_API}/api/driver/${token}/ping`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         lat: location.coords.latitude,
         lng: location.coords.longitude,
@@ -37,46 +40,58 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
 
     if (response.ok) {
       await addLog({
-        action: 'LOCATION_PING',
+        action: "LOCATION_PING",
         location: {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
         },
       });
+      console.log("[BGTask] GPS ping sent:", location.coords.latitude, location.coords.longitude);
     }
   } catch (err) {
-    console.error('[BGTask] Ping failed:', err);
+    console.error("[BGTask] Failed to send ping:", err);
   }
 });
 
-export { BACKGROUND_LOCATION_TASK };
-
 export async function startBackgroundLocationTracking(): Promise<boolean> {
   try {
-    const { status: fg } = await Location.requestForegroundPermissionsAsync();
-    if (fg !== 'granted') return false;
+    // Запрашиваем разрешение foreground
+    const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+    if (fgStatus !== "granted") {
+      console.warn("[BGTask] Foreground location permission denied");
+      return false;
+    }
 
-    const { status: bg } = await Location.requestBackgroundPermissionsAsync();
-    if (bg !== 'granted') return false;
+    // Запрашиваем разрешение background
+    const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+    if (bgStatus !== "granted") {
+      console.warn("[BGTask] Background location permission denied — falling back to foreground only");
+      // Продолжаем без фонового режима
+    }
 
     const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
-    if (!isRegistered) {
-      await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: 60000,
-        distanceInterval: 100,
-        foregroundService: {
-          notificationTitle: 'PingPoint Tracking',
-          notificationBody: 'Location sharing is active',
-          notificationColor: '#00d9ff',
-        },
-        pausesUpdatesAutomatically: false,
-        showsBackgroundLocationIndicator: true,
-      });
+    if (isRegistered) {
+      console.log("[BGTask] Already registered");
+      return true;
     }
+
+    await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
+      accuracy: Location.Accuracy.Balanced,
+      timeInterval: 60000,       // каждые 60 секунд
+      distanceInterval: 200,     // или каждые 200 метров
+      foregroundService: {
+        notificationTitle: "PingPoint Tracking",
+        notificationBody: "GPS location sharing is active",
+        notificationColor: "#00d9ff",
+      },
+      pausesUpdatesAutomatically: false,
+      showsBackgroundLocationIndicator: true,
+    });
+
+    console.log("[BGTask] Background location tracking started");
     return true;
   } catch (err) {
-    console.error('[BGTask] Failed to start:', err);
+    console.error("[BGTask] Failed to start background tracking:", err);
     return false;
   }
 }
@@ -86,9 +101,10 @@ export async function stopBackgroundLocationTracking(): Promise<void> {
     const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
     if (isRegistered) {
       await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+      console.log("[BGTask] Background location tracking stopped");
     }
   } catch (err) {
-    console.error('[BGTask] Failed to stop:', err);
+    console.error("[BGTask] Failed to stop background tracking:", err);
   }
 }
 

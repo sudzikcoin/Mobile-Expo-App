@@ -163,10 +163,9 @@ export async function setLocationEnabled(enabled: boolean): Promise<void> {
 
 export async function getTruckSetupComplete(): Promise<boolean> {
   try {
-    const value = await AsyncStorage.getItem(KEYS.TRUCK_SETUP_COMPLETE);
-    return value === "true";
-  } catch (error) {
-    console.error("Failed to get truck setup status:", error);
+    const val = await AsyncStorage.getItem(KEYS.TRUCK_SETUP_COMPLETE);
+    return val === "true";
+  } catch {
     return false;
   }
 }
@@ -175,15 +174,14 @@ export async function setTruckSetupComplete(complete: boolean): Promise<void> {
   try {
     await AsyncStorage.setItem(KEYS.TRUCK_SETUP_COMPLETE, complete.toString());
   } catch (error) {
-    console.error("Failed to set truck setup status:", error);
+    console.error("Failed to set truck setup complete:", error);
   }
 }
 
 export async function getTruckNumber(): Promise<string | null> {
   try {
     return await AsyncStorage.getItem(KEYS.TRUCK_NUMBER);
-  } catch (error) {
-    console.error("Failed to get truck number:", error);
+  } catch {
     return null;
   }
 }
@@ -199,8 +197,7 @@ export async function setTruckNumber(number: string): Promise<void> {
 export async function getCompanyId(): Promise<string | null> {
   try {
     return await AsyncStorage.getItem(KEYS.COMPANY_ID);
-  } catch (error) {
-    console.error("Failed to get company id:", error);
+  } catch {
     return null;
   }
 }
@@ -216,8 +213,7 @@ export async function setCompanyId(id: string): Promise<void> {
 export async function getDriverName(): Promise<string | null> {
   try {
     return await AsyncStorage.getItem(KEYS.DRIVER_NAME);
-  } catch (error) {
-    console.error("Failed to get driver name:", error);
+  } catch {
     return null;
   }
 }
@@ -233,8 +229,7 @@ export async function setDriverName(name: string): Promise<void> {
 export async function getTruckId(): Promise<string | null> {
   try {
     return await AsyncStorage.getItem(KEYS.TRUCK_ID);
-  } catch (error) {
-    console.error("Failed to get truck id:", error);
+  } catch {
     return null;
   }
 }

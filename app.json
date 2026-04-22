@@ -39,7 +39,9 @@
         "ACCESS_BACKGROUND_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "RECEIVE_BOOT_COMPLETED"
+        "RECEIVE_BOOT_COMPLETED",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
       ],
       "intentFilters": [
         {
@@ -93,12 +95,15 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "PingPoint Driver needs your location to track deliveries.",
-          "locationAlwaysPermission": "PingPoint Driver needs background location to track your route while driving.",
-          "locationWhenInUsePermission": "PingPoint Driver needs your location to share your position."
+          "locationAlwaysAndWhenInUsePermission": "Allow PingPoint to use your location for GPS tracking.",
+          "locationAlwaysPermission": "Allow PingPoint to use your location in the background.",
+          "locationWhenInUsePermission": "Allow PingPoint to use your location while the app is active.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       "./plugins/withMonitoringTool",
+      "expo-task-manager",
       "./plugins/withBootReceiver"
     ],
     "experiments": {

@@ -1,11 +1,11 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { NavigatorScreenParams } from "@react-navigation/native";
-import { ActivityIndicator, View } from "react-native";
 import DrawerNavigator, { DrawerParamList } from "@/navigation/DrawerNavigator";
 import TruckSetupScreen from "@/screens/TruckSetupScreen";
 import { PingPointColors } from "@/constants/theme";
-import { useDriver } from "@/lib/driver-context";
+import { getTruckSetupComplete } from "@/lib/storage";
+import { View, ActivityIndicator } from "react-native";
 
 export type RootStackParamList = {
   TruckSetup: undefined;
@@ -15,11 +15,21 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootStackNavigator() {
-  const { truckSetupComplete } = useDriver();
+  const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
 
-  if (truckSetupComplete === null) {
+  useEffect(() => {
+    checkSetup();
+  }, []);
+
+  const checkSetup = async () => {
+    const complete = await getTruckSetupComplete();
+    setSetupComplete(complete);
+  };
+
+  // Показываем загрузку пока проверяем AsyncStorage
+  if (setupComplete === null) {
     return (
-      <View style={{ flex: 1, backgroundColor: PingPointColors.background, alignItems: "center", justifyContent: "center" }}>
+      <View style={{ flex: 1, backgroundColor: PingPointColors.background, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" color={PingPointColors.cyan} />
       </View>
     );
@@ -27,16 +37,21 @@ export default function RootStackNavigator() {
 
   return (
     <Stack.Navigator
+      initialRouteName={setupComplete ? "Main" : "TruckSetup"}
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: PingPointColors.background },
       }}
     >
-      {!truckSetupComplete ? (
-        <Stack.Screen name="TruckSetup" component={TruckSetupScreen} />
-      ) : (
-        <Stack.Screen name="Main" component={DrawerNavigator} />
-      )}
+      <Stack.Screen
+        name="TruckSetup"
+        children={() => (
+          <TruckSetupScreen
+            onComplete={() => setSetupComplete(true)}
+          />
+        )}
+      />
+      <Stack.Screen name="Main" component={DrawerNavigator} />
     </Stack.Navigator>
   );
 }

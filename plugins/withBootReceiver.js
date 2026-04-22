@@ -1,25 +1,38 @@
-const { withAndroidManifest } = require('@expo/config-plugins');
+const { withAndroidManifest } = require("@expo/config-plugins");
 
 module.exports = function withBootReceiver(config) {
   return withAndroidManifest(config, async (config) => {
-    const manifest = config.modResults;
-    const app = manifest.manifest.application[0];
+    const androidManifest = config.modResults;
+    const mainApplication = androidManifest.manifest.application?.[0];
 
-    if (!app.receiver) app.receiver = [];
+    if (!mainApplication) return config;
 
-    const hasReceiver = app.receiver.some(
-      (r) => r.$?.['android:name'] === 'expo.modules.taskmanager.TaskBroadcastReceiver'
+    if (!mainApplication.receiver) {
+      mainApplication.receiver = [];
+    }
+
+    const bootReceiverExists = mainApplication.receiver.some(
+      (r) =>
+        r.$?.["android:name"]?.includes("BootReceiver") ||
+        r.$?.["android:name"]?.includes("RNBootPermission")
     );
 
-    if (!hasReceiver) {
-      app.receiver.push({
+    if (!bootReceiverExists) {
+      mainApplication.receiver.push({
         $: {
-          'android:name': 'expo.modules.taskmanager.TaskBroadcastReceiver',
-          'android:exported': 'false',
+          "android:name": "expo.modules.taskmanager.TaskManagerPackage$BootReceiver",
+          "android:enabled": "true",
+          "android:exported": "true",
         },
-        'intent-filter': [
+        "intent-filter": [
           {
-            action: [{ $: { 'android:name': 'android.intent.action.BOOT_COMPLETED' } }],
+            action: [
+              {
+                $: {
+                  "android:name": "android.intent.action.BOOT_COMPLETED",
+                },
+              },
+            ],
           },
         ],
       });
