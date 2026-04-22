@@ -20,7 +20,8 @@ import { useAppTheme } from "@/lib/theme-context";
 
 export type DrawerParamList = {
   Dashboard: { token?: string } | undefined;
-  LoadDetails: { loadId: string };
+  // loadId опционален — если не передан, экран возьмёт id текущего активного груза из driver-context
+  LoadDetails: { loadId?: string } | undefined;
   History: undefined;
   Logs: undefined;
   Settings: undefined;

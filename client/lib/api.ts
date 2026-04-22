@@ -16,6 +16,8 @@ interface APIStop {
   city: string;
   state: string;
   address: string;
+  // Полный адрес — приходит с сервера, может отсутствовать
+  fullAddress?: string;
   windowFrom: string;
   windowTo: string | null;
   status: "PLANNED" | "ARRIVED" | "DEPARTED";
@@ -102,6 +104,8 @@ function transformAPIResponse(data: APILoadResponse): { load: Load; balance: num
       city: stop.city,
       state: stop.state,
       address: stop.address,
+      // Пробрасываем полный адрес если пришёл с сервера
+      fullAddress: stop.fullAddress,
       scheduledTime: stop.windowFrom,
       arrivedAt: stop.arrivedAt || undefined,
       departedAt: stop.departedAt || undefined,

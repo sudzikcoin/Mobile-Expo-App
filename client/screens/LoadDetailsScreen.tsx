@@ -15,42 +15,77 @@ import * as Haptics from "expo-haptics";
 import { ThemedText } from "@/components/ThemedText";
 import { PingPointColors, Spacing, BorderRadius } from "@/constants/theme";
 import type { DrawerParamList } from "@/navigation/DrawerNavigator";
+import { useDriver } from "@/lib/driver-context";
+import { Load as DriverLoad, Stop } from "@/lib/types";
 
-interface Load {
+// Структура от эндпоинта /api/loads/:id (коммерческий вид груза — используется при переходе с диспатча)
+interface LoadDetailsData {
   id: string;
-  origin: string;
-  destination: string;
-  rate: number;
-  commodity: string;
-  weight: number;
-  equipmentType: string;
-  brokerName: string;
+  origin?: string;
+  destination?: string;
+  rate?: number;
+  commodity?: string;
+  weight?: number;
+  equipmentType?: string;
+  brokerName?: string;
   brokerPhone?: string;
   brokerEmail?: string;
   pickupTime?: string;
   deliveryTime?: string;
-  status: "available" | "accepted" | "in_transit" | "completed";
+  status?: "available" | "accepted" | "in_transit" | "completed";
   createdAt?: string;
   estimatedMiles?: number;
+  // Стопы могут прийти с сервера — тогда используем их (с fullAddress)
+  stops?: Array<{
+    id: string;
+    type: "PICKUP" | "DELIVERY";
+    sequence?: number;
+    companyName?: string;
+    city?: string;
+    state?: string;
+    address?: string;
+    fullAddress?: string;
+    windowFrom?: string;
+    arrivedAt?: string | null;
+    departedAt?: string | null;
+  }>;
 }
 
 type LoadDetailsRouteProp = RouteProp<DrawerParamList, "LoadDetails">;
+
+// Возвращает строку для адреса стопа: fullAddress → city, state → city
+function formatStopAddress(stop: {
+  fullAddress?: string;
+  city?: string;
+  state?: string;
+  address?: string;
+}): string {
+  if (stop.fullAddress && stop.fullAddress.trim().length > 0) return stop.fullAddress;
+  if (stop.address && stop.address.trim().length > 0) return stop.address;
+  const city = stop.city || "";
+  const state = stop.state || "";
+  if (city && state) return `${city}, ${state}`;
+  return city || state || "—";
+}
 
 export default function LoadDetailsScreen() {
   const route = useRoute<LoadDetailsRouteProp>();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { load: driverLoad } = useDriver();
 
-  const [load, setLoad] = useState<Load | null>(null);
+  const [load, setLoad] = useState<LoadDetailsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAccepting, setIsAccepting] = useState(false);
 
-  const loadId = route.params?.loadId;
+  // Если loadId не передан явно — используем id текущего активного груза из driver-context
+  const loadId = route.params?.loadId || driverLoad?.id;
 
   useEffect(() => {
+    // Нет никакого loadId и нет активного груза — показываем сообщение
     if (!loadId) {
-      setError("No load ID provided");
+      setError("No active load");
       setIsLoading(false);
       return;
     }
@@ -67,15 +102,27 @@ export default function LoadDetailsScreen() {
         );
 
         if (!response.ok) {
+          // Сервер не вернул груз — если есть активный груз в контексте, используем его как fallback
+          if (driverLoad && driverLoad.id === loadId) {
+            console.log("[LoadDetails] Falling back to driver-context load");
+            setLoad(buildFromDriverLoad(driverLoad));
+            return;
+          }
           throw new Error(
             `Failed to fetch load: ${response.status} ${response.statusText}`
           );
         }
 
         const data = await response.json();
-        console.log("[LoadDetails] Load fetched successfully:", data);
+        console.log("[LoadDetails] Load fetched successfully");
         setLoad(data);
       } catch (err) {
+        // В случае сетевой ошибки — используем данные из driver-context если доступны
+        if (driverLoad && driverLoad.id === loadId) {
+          console.log("[LoadDetails] Using driver-context load after error");
+          setLoad(buildFromDriverLoad(driverLoad));
+          return;
+        }
         const errorMsg = err instanceof Error ? err.message : "Unknown error";
         setError(errorMsg);
         console.error("[LoadDetails] Error fetching load:", err);
@@ -85,7 +132,7 @@ export default function LoadDetailsScreen() {
     };
 
     fetchLoad();
-  }, [loadId]);
+  }, [loadId, driverLoad]);
 
   const handleAcceptLoad = async () => {
     if (!load) return;
@@ -175,6 +222,18 @@ export default function LoadDetailsScreen() {
     );
   }
 
+  // Собираем адреса для карточки маршрута из stops (предпочтительно) либо из origin/destination
+  const pickupStopData = load.stops?.find((s) => s.type === "PICKUP");
+  const deliveryStops = load.stops?.filter((s) => s.type === "DELIVERY") || [];
+  const deliveryStopData = deliveryStops[deliveryStops.length - 1];
+
+  const originDisplay = pickupStopData
+    ? formatStopAddress(pickupStopData)
+    : load.origin || "—";
+  const destinationDisplay = deliveryStopData
+    ? formatStopAddress(deliveryStopData)
+    : load.destination || "—";
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -207,7 +266,7 @@ export default function LoadDetailsScreen() {
             </View>
             <View style={styles.locationInfo}>
               <ThemedText style={styles.label}>PICKUP</ThemedText>
-              <ThemedText style={styles.locationText}>{load.origin}</ThemedText>
+              <ThemedText style={styles.locationText}>{originDisplay}</ThemedText>
               {load.pickupTime ? (
                 <ThemedText style={styles.timeText}>{load.pickupTime}</ThemedText>
               ) : null}
@@ -223,7 +282,7 @@ export default function LoadDetailsScreen() {
             <View style={styles.locationInfo}>
               <ThemedText style={styles.label}>DELIVERY</ThemedText>
               <ThemedText style={styles.locationText}>
-                {load.destination}
+                {destinationDisplay}
               </ThemedText>
               {load.deliveryTime ? (
                 <ThemedText style={styles.timeText}>{load.deliveryTime}</ThemedText>
@@ -241,76 +300,125 @@ export default function LoadDetailsScreen() {
           ) : null}
         </View>
 
-        <View style={styles.infoCard}>
-          <ThemedText style={styles.cardTitle}>COMMERCIAL INFO</ThemedText>
-
-          <View style={styles.infoRow}>
-            <ThemedText style={styles.infoLabel}>Rate</ThemedText>
-            <ThemedText style={styles.rateValue}>${load.rate}</ThemedText>
+        {/* Список всех стопов с полными адресами, если они есть в ответе сервера */}
+        {load.stops && load.stops.length > 0 ? (
+          <View style={styles.infoCard}>
+            <ThemedText style={styles.cardTitle}>STOPS</ThemedText>
+            {load.stops.map((stop, idx) => (
+              <View
+                key={stop.id || `stop-${idx}`}
+                style={[
+                  styles.stopRow,
+                  idx < load.stops!.length - 1 && styles.stopRowDivider,
+                ]}
+              >
+                <View style={styles.stopRowHeader}>
+                  <View
+                    style={[
+                      styles.stopTypeBadge,
+                      stop.type === "DELIVERY" && styles.stopTypeBadgeDelivery,
+                    ]}
+                  >
+                    <ThemedText style={styles.stopTypeText}>{stop.type}</ThemedText>
+                  </View>
+                  {stop.companyName ? (
+                    <ThemedText style={styles.stopCompany}>{stop.companyName}</ThemedText>
+                  ) : null}
+                </View>
+                <ThemedText style={styles.stopAddress}>
+                  {formatStopAddress(stop)}
+                </ThemedText>
+              </View>
+            ))}
           </View>
+        ) : null}
 
-          <View style={styles.infoRow}>
-            <ThemedText style={styles.infoLabel}>Commodity</ThemedText>
-            <ThemedText style={styles.infoValue}>{load.commodity}</ThemedText>
+        {load.rate || load.commodity || load.weight || load.equipmentType ? (
+          <View style={styles.infoCard}>
+            <ThemedText style={styles.cardTitle}>COMMERCIAL INFO</ThemedText>
+
+            {load.rate ? (
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>Rate</ThemedText>
+                <ThemedText style={styles.rateValue}>${load.rate}</ThemedText>
+              </View>
+            ) : null}
+
+            {load.commodity ? (
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>Commodity</ThemedText>
+                <ThemedText style={styles.infoValue}>{load.commodity}</ThemedText>
+              </View>
+            ) : null}
+
+            {load.weight ? (
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>Weight</ThemedText>
+                <ThemedText style={styles.infoValue}>
+                  {(load.weight / 1000).toFixed(1)} tons
+                </ThemedText>
+              </View>
+            ) : null}
+
+            {load.equipmentType ? (
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>Equipment</ThemedText>
+                <ThemedText style={styles.infoValue}>{load.equipmentType}</ThemedText>
+              </View>
+            ) : null}
           </View>
+        ) : null}
 
-          <View style={styles.infoRow}>
-            <ThemedText style={styles.infoLabel}>Weight</ThemedText>
-            <ThemedText style={styles.infoValue}>
-              {(load.weight / 1000).toFixed(1)} tons
+        {load.brokerName || load.brokerPhone || load.brokerEmail ? (
+          <View style={styles.infoCard}>
+            <ThemedText style={styles.cardTitle}>BROKER</ThemedText>
+
+            {load.brokerName ? (
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>Company</ThemedText>
+                <ThemedText style={styles.infoValue}>{load.brokerName}</ThemedText>
+              </View>
+            ) : null}
+
+            {load.brokerPhone ? (
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>Phone</ThemedText>
+                <Pressable>
+                  <ThemedText style={[styles.infoValue, styles.linkText]}>
+                    {load.brokerPhone}
+                  </ThemedText>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {load.brokerEmail ? (
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>Email</ThemedText>
+                <Pressable>
+                  <ThemedText style={[styles.infoValue, styles.linkText]}>
+                    {load.brokerEmail}
+                  </ThemedText>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {load.status ? (
+          <View
+            style={[
+              styles.statusBadge,
+              load.status === "available" && styles.statusAvailable,
+              load.status === "accepted" && styles.statusAccepted,
+              load.status === "in_transit" && styles.statusInTransit,
+              load.status === "completed" && styles.statusCompleted,
+            ]}
+          >
+            <ThemedText style={styles.statusText}>
+              Status: {load.status.toUpperCase().replace("_", " ")}
             </ThemedText>
           </View>
-
-          <View style={styles.infoRow}>
-            <ThemedText style={styles.infoLabel}>Equipment</ThemedText>
-            <ThemedText style={styles.infoValue}>{load.equipmentType}</ThemedText>
-          </View>
-        </View>
-
-        <View style={styles.infoCard}>
-          <ThemedText style={styles.cardTitle}>BROKER</ThemedText>
-
-          <View style={styles.infoRow}>
-            <ThemedText style={styles.infoLabel}>Company</ThemedText>
-            <ThemedText style={styles.infoValue}>{load.brokerName}</ThemedText>
-          </View>
-
-          {load.brokerPhone ? (
-            <View style={styles.infoRow}>
-              <ThemedText style={styles.infoLabel}>Phone</ThemedText>
-              <Pressable>
-                <ThemedText style={[styles.infoValue, styles.linkText]}>
-                  {load.brokerPhone}
-                </ThemedText>
-              </Pressable>
-            </View>
-          ) : null}
-
-          {load.brokerEmail ? (
-            <View style={styles.infoRow}>
-              <ThemedText style={styles.infoLabel}>Email</ThemedText>
-              <Pressable>
-                <ThemedText style={[styles.infoValue, styles.linkText]}>
-                  {load.brokerEmail}
-                </ThemedText>
-              </Pressable>
-            </View>
-          ) : null}
-        </View>
-
-        <View
-          style={[
-            styles.statusBadge,
-            load.status === "available" && styles.statusAvailable,
-            load.status === "accepted" && styles.statusAccepted,
-            load.status === "in_transit" && styles.statusInTransit,
-            load.status === "completed" && styles.statusCompleted,
-          ]}
-        >
-          <ThemedText style={styles.statusText}>
-            Status: {load.status.toUpperCase().replace("_", " ")}
-          </ThemedText>
-        </View>
+        ) : null}
       </ScrollView>
 
       {load.status === "available" ? (
@@ -334,6 +442,41 @@ export default function LoadDetailsScreen() {
       ) : null}
     </View>
   );
+}
+
+// Строит данные для экрана из активного груза водителя (когда сервер недоступен или эндпоинт /api/loads/:id не отвечает)
+function buildFromDriverLoad(dl: DriverLoad): LoadDetailsData {
+  const stops = (dl.stops || []).map((s: Stop) => ({
+    id: s.id,
+    type: s.type,
+    sequence: s.sequence,
+    companyName: s.companyName,
+    city: s.city,
+    state: s.state,
+    address: s.address,
+    fullAddress: s.fullAddress,
+    windowFrom: s.scheduledTime,
+    arrivedAt: s.arrivedAt,
+    departedAt: s.departedAt,
+  }));
+
+  const pickupStop = stops.find((s) => s.type === "PICKUP");
+  const deliveryStops = stops.filter((s) => s.type === "DELIVERY");
+  const deliveryStop = deliveryStops[deliveryStops.length - 1];
+
+  const originDisplay = pickupStop
+    ? (pickupStop.fullAddress || `${pickupStop.city || ""}, ${pickupStop.state || ""}`.replace(/^, |, $/, ""))
+    : undefined;
+  const destinationDisplay = deliveryStop
+    ? (deliveryStop.fullAddress || `${deliveryStop.city || ""}, ${deliveryStop.state || ""}`.replace(/^, |, $/, ""))
+    : undefined;
+
+  return {
+    id: dl.id,
+    origin: originDisplay,
+    destination: destinationDisplay,
+    stops,
+  };
 }
 
 const styles = StyleSheet.create({
@@ -483,6 +626,44 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: PingPointColors.success,
     fontWeight: "700",
+  },
+  stopRow: {
+    paddingVertical: Spacing.sm,
+  },
+  stopRowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: PingPointColors.border,
+  },
+  stopRowHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  stopTypeBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs,
+    backgroundColor: "rgba(0, 217, 255, 0.2)",
+  },
+  stopTypeBadgeDelivery: {
+    backgroundColor: "rgba(255, 215, 0, 0.2)",
+  },
+  stopTypeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: PingPointColors.textPrimary,
+    letterSpacing: 0.5,
+  },
+  stopCompany: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: PingPointColors.textPrimary,
+    flex: 1,
+  },
+  stopAddress: {
+    fontSize: 13,
+    color: PingPointColors.textSecondary,
   },
   statusBadge: {
     paddingHorizontal: Spacing.lg,

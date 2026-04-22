@@ -77,21 +77,31 @@ export default function LoadCard({
         </View>
       </View>
 
-      <View style={styles.routeContainer}>
-        <View style={styles.routePoint}>
-          <Feather name="circle" size={10} color={isArcade ? PingPointColors.cyan : "#ffffff"} />
-          <ThemedText style={[styles.routeCity, { color: colors.textPrimary }]}>
-            {load.originCity.toUpperCase()}
-          </ThemedText>
-        </View>
-        <View style={[styles.routeLine, { backgroundColor: colors.border }]} />
-        <View style={styles.routePoint}>
-          <Feather name="map-pin" size={12} color={isArcade ? PingPointColors.yellow : "#ffffff"} />
-          <ThemedText style={[styles.routeCity, { color: colors.textPrimary }]}>
-            {load.destinationCity.toUpperCase()}
-          </ThemedText>
-        </View>
-      </View>
+      {(() => {
+        // originCity/destinationCity могут отсутствовать в ответе сервера — берём из первого PICKUP и последнего DELIVERY
+        const pickup = load.stops?.find((s) => s.type === "PICKUP");
+        const deliveries = load.stops?.filter((s) => s.type === "DELIVERY") || [];
+        const lastDelivery = deliveries[deliveries.length - 1];
+        const originCity = (load.originCity || pickup?.city || "—").toUpperCase();
+        const destCity = (load.destinationCity || lastDelivery?.city || "—").toUpperCase();
+        return (
+          <View style={styles.routeContainer}>
+            <View style={styles.routePoint}>
+              <Feather name="circle" size={10} color={isArcade ? PingPointColors.cyan : "#ffffff"} />
+              <ThemedText style={[styles.routeCity, { color: colors.textPrimary }]}>
+                {originCity}
+              </ThemedText>
+            </View>
+            <View style={[styles.routeLine, { backgroundColor: colors.border }]} />
+            <View style={styles.routePoint}>
+              <Feather name="map-pin" size={12} color={isArcade ? PingPointColors.yellow : "#ffffff"} />
+              <ThemedText style={[styles.routeCity, { color: colors.textPrimary }]}>
+                {destCity}
+              </ThemedText>
+            </View>
+          </View>
+        );
+      })()}
 
       {isLocationDenied && Platform.OS !== "web" ? (
         <View style={styles.deniedContainer}>

@@ -77,13 +77,17 @@ export default function StopCard({ stop, isCurrent, onAction, isLoading }: StopC
           {stop.companyName}
         </ThemedText>
 
+        {/* Отображаем полный адрес если он пришёл с сервера, иначе city, state */}
         <ThemedText style={[styles.location, completed && styles.textCompleted]}>
-          {stop.city}, {stop.state}
+          {stop.fullAddress || `${stop.city}${stop.state ? ", " + stop.state : ""}`}
         </ThemedText>
 
-        <ThemedText style={[styles.address, completed && styles.textCompleted]}>
-          {stop.address}
-        </ThemedText>
+        {/* Дополнительная строка с address — только если fullAddress не используется или отличается */}
+        {stop.address && stop.address !== stop.fullAddress ? (
+          <ThemedText style={[styles.address, completed && styles.textCompleted]}>
+            {stop.address}
+          </ThemedText>
+        ) : null}
 
         <View style={styles.timeRow}>
           <Feather

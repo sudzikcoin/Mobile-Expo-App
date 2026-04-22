@@ -11,6 +11,8 @@ export interface Stop {
   city: string;
   state: string;
   address: string;
+  // Полный адрес (если доступен с сервера) — используется для отображения вместо city/state
+  fullAddress?: string;
   scheduledTime: string;
   arrivedAt?: string;
   departedAt?: string;
@@ -20,10 +22,13 @@ export interface Load {
   id: string;
   loadNumber: string;
   status: LoadStatus;
-  originCity: string;
-  originState: string;
-  destinationCity: string;
-  destinationState: string;
+  // originCity/originState теперь опциональны — на сервере их нет, вычисляем из stops[]
+  originCity?: string;
+  originState?: string;
+  destinationCity?: string;
+  destinationState?: string;
+  // Дата/время доставки с сервера
+  deliveredAt?: string;
   stops: Stop[];
 }
 

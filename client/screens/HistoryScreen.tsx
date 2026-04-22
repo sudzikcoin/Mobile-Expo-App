@@ -6,8 +6,8 @@ import { ThemedText } from "@/components/ThemedText";
 import ScreenHeader from "@/components/ScreenHeader";
 import EmptyState from "@/components/EmptyState";
 import { PingPointColors, Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
-import { Load } from "@/lib/types";
-import { getCompletedLoads } from "@/lib/storage";
+import { Load, Stop } from "@/lib/types";
+import { getCompletedLoads, getDriverToken } from "@/lib/storage";
 import { MOCK_COMPLETED_LOADS, formatDateTime } from "@/lib/mock-data";
 import { useAppTheme } from "@/lib/theme-context";
 
@@ -17,15 +17,38 @@ interface LoadHistoryItemProps {
   load: Load;
 }
 
+// Форматирует адрес стопа: предпочитает fullAddress, иначе city + state
+function formatStopAddress(stop?: Stop): string {
+  if (!stop) return "—";
+  if (stop.fullAddress && stop.fullAddress.trim().length > 0) {
+    return stop.fullAddress;
+  }
+  const city = stop.city || "";
+  const state = stop.state || "";
+  if (city && state) return `${city}, ${state}`;
+  return city || state || "—";
+}
+
 function LoadHistoryItem({ load }: LoadHistoryItemProps) {
   const { colors, isArcade } = useAppTheme();
+
+  // Origin: первый PICKUP стоп
+  const pickupStop = load.stops.find((s) => s.type === "PICKUP");
+  // Destination: последний DELIVERY стоп
+  const deliveryStops = load.stops.filter((s) => s.type === "DELIVERY");
+  const deliveryStop = deliveryStops[deliveryStops.length - 1];
+
+  const originText = formatStopAddress(pickupStop);
+  const destinationText = formatStopAddress(deliveryStop);
+
+  // Дата доставки: load.deliveredAt, либо departedAt последнего стопа
   const lastStop = load.stops[load.stops.length - 1];
-  const deliveredAt = lastStop?.departedAt;
+  const deliveredAt = load.deliveredAt || lastStop?.departedAt;
 
   return (
     <View style={[
-      styles.loadCard, 
-      { 
+      styles.loadCard,
+      {
         backgroundColor: colors.surface,
         borderColor: isArcade ? "rgba(0, 217, 255, 0.2)" : colors.border,
         borderRadius: colors.borderRadius,
@@ -39,12 +62,12 @@ function LoadHistoryItem({ load }: LoadHistoryItemProps) {
       </View>
 
       <View style={styles.routeRow}>
-        <ThemedText style={[styles.routeText, { color: colors.textPrimary }]}>
-          {load.originCity}, {load.originState}
+        <ThemedText style={[styles.routeText, { color: colors.textPrimary }]} numberOfLines={2}>
+          {originText}
         </ThemedText>
         <ThemedText style={[styles.arrow, { color: colors.textSecondary }]}>→</ThemedText>
-        <ThemedText style={[styles.routeText, { color: colors.textPrimary }]}>
-          {load.destinationCity}, {load.destinationState}
+        <ThemedText style={[styles.routeText, { color: colors.textPrimary }]} numberOfLines={2}>
+          {destinationText}
         </ThemedText>
       </View>
 
@@ -63,6 +86,34 @@ function LoadHistoryItem({ load }: LoadHistoryItemProps) {
   );
 }
 
+// Преобразует ответ сервера в структуру Load, используемую приложением.
+// Сервер возвращает стопы с полями { type, fullAddress, city, state, arrivedAt, departedAt, ... }
+function mapServerLoad(raw: any): Load {
+  const rawStops: any[] = Array.isArray(raw?.stops) ? raw.stops : [];
+  const stops: Stop[] = rawStops.map((s, idx) => ({
+    id: String(s.id ?? idx),
+    sequence: typeof s.sequence === "number" ? s.sequence : idx + 1,
+    type: (s.type === "DELIVERY" ? "DELIVERY" : "PICKUP"),
+    status: s.status === "ARRIVED" ? "ARRIVED" : s.status === "DEPARTED" ? "DEPARTED" : "PENDING",
+    companyName: s.companyName || s.company || "",
+    city: s.city || "",
+    state: s.state || "",
+    address: s.address || s.fullAddress || "",
+    fullAddress: s.fullAddress || undefined,
+    scheduledTime: s.windowFrom || s.scheduledTime || s.arrivedAt || s.departedAt || "",
+    arrivedAt: s.arrivedAt || undefined,
+    departedAt: s.departedAt || undefined,
+  }));
+
+  return {
+    id: String(raw.id),
+    loadNumber: String(raw.loadNumber ?? ""),
+    status: raw.status === "IN_TRANSIT" ? "IN_TRANSIT" : raw.status === "DELIVERED" ? "DELIVERED" : "PLANNED",
+    deliveredAt: raw.deliveredAt || undefined,
+    stops,
+  };
+}
+
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isArcade } = useAppTheme();
@@ -72,11 +123,41 @@ export default function HistoryScreen() {
 
   const loadHistory = useCallback(async () => {
     try {
-      const completedLoads = await getCompletedLoads();
-      if (completedLoads.length === 0) {
-        setLoads(MOCK_COMPLETED_LOADS);
+      // 1) Пытаемся загрузить историю с сервера
+      const token = await getDriverToken();
+      if (token) {
+        try {
+          const url = `https://pingpoint.suverse.io/api/driver/${token}/history`;
+          console.log("[History] Fetching from server:", url);
+          const res = await fetch(url, {
+            method: "GET",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              const mapped = data.map(mapServerLoad);
+              console.log(`[History] Loaded ${mapped.length} loads from server`);
+              setLoads(mapped);
+              return;
+            }
+            console.log("[History] Server returned empty history, using fallback");
+          } else {
+            console.warn("[History] Server responded with", res.status);
+          }
+        } catch (serverErr) {
+          console.warn("[History] Server fetch failed, using fallback:", serverErr);
+        }
       } else {
+        console.log("[History] No driver token — using local fallback");
+      }
+
+      // 2) Fallback: локальный AsyncStorage
+      const completedLoads = await getCompletedLoads();
+      if (completedLoads.length > 0) {
         setLoads(completedLoads);
+      } else {
+        setLoads(MOCK_COMPLETED_LOADS);
       }
     } catch (error) {
       console.error("Failed to load history:", error);
@@ -185,10 +266,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: Spacing.sm,
     marginBottom: Spacing.sm,
+    flexWrap: "wrap",
   },
   routeText: {
     ...Typography.body,
     color: PingPointColors.textPrimary,
+    flex: 1,
   },
   arrow: {
     ...Typography.body,
