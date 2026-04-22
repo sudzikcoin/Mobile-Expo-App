@@ -25,7 +25,7 @@ import {
 } from "@/lib/storage";
 
 const AGENTOS_BASE = "https://agentos.suverse.io";
-const AGENTOS_KEY = process.env.EXPO_PUBLIC_AGENTOS_INTERNAL_KEY || "";
+const AGENTOS_KEY = process.env.EXPO_PUBLIC_AGENTOS_INTERNAL_KEY || "pingpoint-internal-2024";
 
 interface Company {
   id: string;
