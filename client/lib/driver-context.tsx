@@ -286,10 +286,18 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         
         setIsLocationEnabled(locationEnabled);
 
-        // Проверяем реальный статус фонового трекера
-        const bgActive = await isBackgroundTrackingActive();
-        if (bgActive !== locationEnabled) {
-          setIsLocationEnabled(bgActive);
+        // Если GPS был включён — перезапускаем трекинг (task manager сбрасывается при перезапуске)
+        if (locationEnabled && savedToken) {
+          setIsLocationEnabled(true);
+          // Запускаем через 2 сек после инициализации токена
+          setTimeout(async () => {
+            const started = await startBackgroundLocationTracking();
+            if (started) {
+              console.log("[Driver] Background GPS restarted on app init");
+            } else {
+              console.warn("[Driver] Background GPS restart failed on init");
+            }
+          }, 2000);
         }
       } catch (err) {
         console.error("Failed to initialize:", err);
