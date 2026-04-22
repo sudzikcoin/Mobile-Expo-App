@@ -41,16 +41,20 @@ export default function RootStackNavigator() {
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: PingPointColors.background },
+        animation: "fade",
       }}
     >
-      <Stack.Screen
-        name="TruckSetup"
-        children={() => (
+      <Stack.Screen name="TruckSetup">
+        {(props) => (
           <TruckSetupScreen
-            onComplete={() => setSetupComplete(true)}
+            {...props}
+            onComplete={() => {
+              setSetupComplete(true);
+              props.navigation.replace("Main");
+            }}
           />
         )}
-      />
+      </Stack.Screen>
       <Stack.Screen name="Main" component={DrawerNavigator} />
     </Stack.Navigator>
   );
