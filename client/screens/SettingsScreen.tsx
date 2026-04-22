@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { View, StyleSheet, Pressable, Platform, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -8,6 +8,8 @@ import { ThemedText } from "@/components/ThemedText";
 import ScreenHeader from "@/components/ScreenHeader";
 import { PingPointColors, Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { useAppTheme } from "@/lib/theme-context";
+import { useDriver } from "@/lib/driver-context";
+import { getTruckNumber, getDriverName } from "@/lib/storage";
 
 interface SettingRowProps {
   icon: keyof typeof Feather.glyphMap;
@@ -88,6 +90,28 @@ function SettingRow({
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { appTheme, setAppTheme, colors, isArcade } = useAppTheme();
+  const { resetTruckSetup } = useDriver();
+
+  const [truckNumber, setTruckNumberState] = useState<string | null>(null);
+  const [driverName, setDriverNameState] = useState<string | null>(null);
+
+  const loadTruckInfo = useCallback(async () => {
+    const num = await getTruckNumber();
+    const name = await getDriverName();
+    setTruckNumberState(num);
+    setDriverNameState(name);
+  }, []);
+
+  useEffect(() => {
+    loadTruckInfo();
+  }, [loadTruckInfo]);
+
+  const handleChangeTruck = async () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    await resetTruckSetup();
+  };
 
   const handleThemeChange = (theme: "arcade" | "premium") => {
     console.log("[Settings] Changing theme to:", theme);
@@ -102,6 +126,25 @@ export default function SettingsScreen() {
       <ScreenHeader title="Settings" />
 
       <View style={[styles.content, { paddingBottom: insets.bottom + Spacing.xl }]}>
+        <View style={styles.section}>
+          <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>TRUCK &amp; DRIVER</ThemedText>
+          <SettingRow
+            icon="truck"
+            label="Truck"
+            value={truckNumber ? `Truck ${truckNumber}` : "Not set"}
+          />
+          <SettingRow
+            icon="user"
+            label="Driver"
+            value={driverName ? (driverName.length > 14 ? `${driverName.slice(0, 14)}...` : driverName) : "Not set"}
+          />
+          <SettingRow
+            icon="refresh-cw"
+            label="Change Truck"
+            onPress={handleChangeTruck}
+          />
+        </View>
+
         <View style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>APPEARANCE</ThemedText>
 

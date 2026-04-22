@@ -8,6 +8,11 @@ const KEYS = {
   COMPLETED_LOADS: "@pingpoint_completed_loads",
   LOGS: "@pingpoint_logs",
   LOCATION_ENABLED: "@pingpoint_location_enabled",
+  TRUCK_ID: "@pingpoint_truck_id",
+  TRUCK_NUMBER: "@pingpoint_truck_number",
+  COMPANY_ID: "@pingpoint_company_id",
+  DRIVER_NAME: "@pingpoint_driver_name",
+  TRUCK_SETUP_COMPLETE: "@pingpoint_truck_setup_complete",
 };
 
 export async function getDriverToken(): Promise<string | null> {
@@ -153,5 +158,91 @@ export async function setLocationEnabled(enabled: boolean): Promise<void> {
     await AsyncStorage.setItem(KEYS.LOCATION_ENABLED, enabled.toString());
   } catch (error) {
     console.error("Failed to set location status:", error);
+  }
+}
+
+export async function getTruckSetupComplete(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(KEYS.TRUCK_SETUP_COMPLETE);
+    return value === "true";
+  } catch (error) {
+    console.error("Failed to get truck setup status:", error);
+    return false;
+  }
+}
+
+export async function setTruckSetupComplete(complete: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(KEYS.TRUCK_SETUP_COMPLETE, complete.toString());
+  } catch (error) {
+    console.error("Failed to set truck setup status:", error);
+  }
+}
+
+export async function getTruckNumber(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(KEYS.TRUCK_NUMBER);
+  } catch (error) {
+    console.error("Failed to get truck number:", error);
+    return null;
+  }
+}
+
+export async function setTruckNumber(number: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(KEYS.TRUCK_NUMBER, number);
+  } catch (error) {
+    console.error("Failed to set truck number:", error);
+  }
+}
+
+export async function getCompanyId(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(KEYS.COMPANY_ID);
+  } catch (error) {
+    console.error("Failed to get company id:", error);
+    return null;
+  }
+}
+
+export async function setCompanyId(id: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(KEYS.COMPANY_ID, id);
+  } catch (error) {
+    console.error("Failed to set company id:", error);
+  }
+}
+
+export async function getDriverName(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(KEYS.DRIVER_NAME);
+  } catch (error) {
+    console.error("Failed to get driver name:", error);
+    return null;
+  }
+}
+
+export async function setDriverName(name: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(KEYS.DRIVER_NAME, name);
+  } catch (error) {
+    console.error("Failed to set driver name:", error);
+  }
+}
+
+export async function getTruckId(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(KEYS.TRUCK_ID);
+  } catch (error) {
+    console.error("Failed to get truck id:", error);
+    return null;
+  }
+}
+
+export async function setTruckId(id: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(KEYS.TRUCK_ID, id);
+  } catch (error) {
+    console.error("Failed to set truck id:", error);
   }
 }

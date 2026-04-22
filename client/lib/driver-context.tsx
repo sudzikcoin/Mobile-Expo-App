@@ -1,13 +1,24 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import * as Linking from "expo-linking";
 import * as Location from "expo-location";
 import { Platform } from "react-native";
 
-import { getDriverToken, setDriverToken as saveDriverToken, addLog, setLocationEnabled as saveLocationEnabled, isLocationEnabled as getLocationEnabled } from "./storage";
+import {
+  getDriverToken,
+  setDriverToken as saveDriverToken,
+  addLog,
+  setLocationEnabled as saveLocationEnabled,
+  isLocationEnabled as getLocationEnabled,
+  getTruckSetupComplete,
+  setTruckSetupComplete as storagSetTruckSetupComplete,
+} from "./storage";
 import { fetchDriverLoad, sendLocationPing, markStopArrival, markStopDeparture } from "./api";
 import { Load } from "./types";
-
-const GPS_PING_INTERVAL = 60000;
+import {
+  startBackgroundLocationTracking,
+  stopBackgroundLocationTracking,
+  isBackgroundTrackingActive,
+} from "./backgroundTask";
 
 interface DriverContextType {
   token: string | null;
@@ -19,11 +30,14 @@ interface DriverContextType {
   isLocationLoading: boolean;
   isLocationDenied: boolean;
   lastPingTime: Date | null;
+  truckSetupComplete: boolean | null;
   setToken: (token: string) => Promise<void>;
   refreshLoad: () => Promise<void>;
   toggleLocation: () => Promise<void>;
   openSettings: () => Promise<void>;
   handleStopAction: (stopId: string, action: "arrive" | "depart") => Promise<{ success: boolean; pointsAwarded: number }>;
+  completeTruckSetup: () => Promise<void>;
+  resetTruckSetup: () => Promise<void>;
 }
 
 const DriverContext = createContext<DriverContextType | undefined>(undefined);
@@ -38,14 +52,12 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   const [isLocationLoading, setIsLocationLoading] = useState(false);
   const [isLocationDenied, setIsLocationDenied] = useState(false);
   const [lastPingTime, setLastPingTime] = useState<Date | null>(null);
-  
-  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
+  const [truckSetupComplete, setTruckSetupCompleteState] = useState<boolean | null>(null);
 
   const parseTokenFromUrl = (url: string): string | null => {
     try {
       console.log("[DeepLink] Parsing URL:", url);
-      
+
       // Try direct path matching first for https:// URLs
       // Format: https://domain/driver/drv_xxxxx
       const pathMatch = url.match(/\/driver\/(drv_[a-zA-Z0-9]+)/);
@@ -53,24 +65,24 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         console.log("[DeepLink] Extracted token from path:", pathMatch[1]);
         return pathMatch[1];
       }
-      
+
       // Fallback: try any token format after /driver/
       const anyTokenMatch = url.match(/\/driver\/([^/?]+)/);
       if (anyTokenMatch && anyTokenMatch[1]) {
         console.log("[DeepLink] Extracted token (fallback):", anyTokenMatch[1]);
         return anyTokenMatch[1];
       }
-      
+
       // Try expo-linking parser for pingpoint:// scheme
       const parsed = Linking.parse(url);
       console.log("[DeepLink] Parsed URL:", JSON.stringify(parsed));
-      
+
       if (parsed.path?.startsWith("driver/")) {
         const token = parsed.path.replace("driver/", "");
         console.log("[DeepLink] Token from parsed path:", token);
         return token;
       }
-      
+
       // Check query params
       if (parsed.queryParams?.token) {
         console.log("[DeepLink] Token from query params:", parsed.queryParams.token);
@@ -107,7 +119,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     try {
       setError(null);
       const result = await fetchDriverLoad(token);
-      
+
       if (result) {
         console.log("[Driver] Load fetched successfully:", result.load.loadNumber);
         setLoad(result.load);
@@ -155,25 +167,14 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   }, [token, isLocationEnabled]);
 
   const startLocationTracking = useCallback(async () => {
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
+    const started = await startBackgroundLocationTracking();
+    if (started) {
+      await sendPing();
     }
-
-    await sendPing();
-
-    pingIntervalRef.current = setInterval(sendPing, GPS_PING_INTERVAL);
   }, [sendPing]);
 
-  const stopLocationTracking = useCallback(() => {
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = null;
-    }
-
-    if (locationSubscriptionRef.current) {
-      locationSubscriptionRef.current.remove();
-      locationSubscriptionRef.current = null;
-    }
+  const stopLocationTracking = useCallback(async () => {
+    await stopBackgroundLocationTracking();
   }, []);
 
   const openSettings = async () => {
@@ -195,7 +196,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
         if (permissionResult.status !== "granted") {
           setIsLocationLoading(false);
-          
+
           if (!permissionResult.canAskAgain) {
             setIsLocationDenied(true);
             setError("Location permission denied. Please enable in Settings.");
@@ -211,7 +212,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         setIsLocationEnabled(true);
         await startLocationTracking();
       } else {
-        stopLocationTracking();
+        await stopLocationTracking();
         await saveLocationEnabled(false);
         await addLog({ action: "LOCATION_DISABLED" });
         setIsLocationEnabled(false);
@@ -235,7 +236,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
       if (result.success) {
         setBalance(result.newBalance);
-        
+
         const currentStop = load?.stops.find(s => s.id === stopId);
         await addLog({
           action: action === "arrive" ? "ARRIVE" : "DEPART",
@@ -254,17 +255,35 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const completeTruckSetup = async () => {
+    await storagSetTruckSetupComplete(true);
+    setTruckSetupCompleteState(true);
+  };
+
+  const resetTruckSetup = async () => {
+    await storagSetTruckSetupComplete(false);
+    setTruckSetupCompleteState(false);
+  };
+
   useEffect(() => {
     const init = async () => {
       try {
         const savedToken = await getDriverToken();
         const locationEnabled = await getLocationEnabled();
-        
+        const setupComplete = await getTruckSetupComplete();
+
         if (savedToken) {
           setTokenState(savedToken);
         }
-        
+
         setIsLocationEnabled(locationEnabled);
+        setTruckSetupCompleteState(setupComplete);
+
+        // Restore background tracking state
+        const bgActive = await isBackgroundTrackingActive();
+        if (bgActive && locationEnabled) {
+          setIsLocationEnabled(true);
+        }
       } catch (err) {
         console.error("Failed to initialize:", err);
       } finally {
@@ -312,9 +331,31 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     }
 
     return () => {
-      stopLocationTracking();
+      stopBackgroundLocationTracking();
     };
-  }, [token, isLocationEnabled, startLocationTracking, stopLocationTracking]);
+  }, [token, isLocationEnabled, startLocationTracking]);
+
+  // Poll for new load every 30 seconds
+  useEffect(() => {
+    if (!token) return;
+
+    const checkNewLoad = async () => {
+      try {
+        const res = await fetch(`https://pingpoint.suverse.io/api/driver/${token}/next-load`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.hasNewLoad && data.newToken) {
+          console.log('[Driver] New load available, switching token:', data.newToken);
+          await setToken(data.newToken);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    const interval = setInterval(checkNewLoad, 30000);
+    return () => clearInterval(interval);
+  }, [token]);
 
   return (
     <DriverContext.Provider
@@ -328,11 +369,14 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         isLocationLoading,
         isLocationDenied,
         lastPingTime,
+        truckSetupComplete,
         setToken,
         refreshLoad,
         toggleLocation,
         openSettings,
         handleStopAction,
+        completeTruckSetup,
+        resetTruckSetup,
       }}
     >
       {children}
