@@ -11,6 +11,8 @@ import {
 } from "./backgroundTask";
 import { fetchDriverLoad, sendLocationPing, markStopArrival, markStopDeparture } from "./api";
 import { Load } from "./types";
+import { getFreshTelemetry } from "./iosix/store";
+import { getIOSiXService } from "./iosix/service";
 
 const GPS_PING_INTERVAL = 60000;
 
@@ -136,12 +138,18 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         accuracy: Location.Accuracy.Balanced,
       });
 
+      let iosix = null;
+      try {
+        iosix = await getFreshTelemetry();
+      } catch {}
+
       const success = await sendLocationPing(token, {
         lat: location.coords.latitude,
         lng: location.coords.longitude,
         accuracy: location.coords.accuracy || 0,
         speed: location.coords.speed,
         heading: location.coords.heading,
+        iosix,
       });
 
       if (success) {
@@ -273,6 +281,14 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       return { success: false, pointsAwarded: 0 };
     }
   };
+
+  // Start the IOSiX BLE service once at provider mount so telemetry is
+  // available to both UI (via useIOSiXTelemetry) and the headless ping
+  // task (via getFreshTelemetry). The service no-ops if BLE permission
+  // is denied or the ELD is out of range — no error surfaces to the user.
+  useEffect(() => {
+    getIOSiXService().start().catch(() => {});
+  }, []);
 
   useEffect(() => {
     const init = async () => {

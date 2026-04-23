@@ -1,6 +1,8 @@
 import * as TaskManager from "expo-task-manager";
 import * as Location from "expo-location";
 import { getDriverToken, addLog, isLocationEnabled } from "./storage";
+import { getFreshTelemetry } from "./iosix/store";
+import { IOSIX_MAC } from "./iosix/service";
 
 export const BACKGROUND_LOCATION_TASK = "PINGPOINT_BACKGROUND_LOCATION";
 
@@ -26,6 +28,11 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }: any) =>
     const location = locations?.[0];
     if (!location) return;
 
+    let iosix = null;
+    try {
+      iosix = await getFreshTelemetry();
+    } catch {}
+
     const response = await fetch(`${PINGPOINT_API}/api/driver/${token}/ping`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -34,7 +41,26 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }: any) =>
         lng: location.coords.longitude,
         accuracy: location.coords.accuracy || 0,
         speed: location.coords.speed,
-        heading: location.coords.heading,
+        heading: iosix?.heading ?? location.coords.heading,
+        rpm: iosix?.rpm ?? null,
+        engineLoadPct: iosix?.engineLoadPct ?? null,
+        coolantTempC: iosix?.coolantTempC ?? null,
+        oilPressureKpa: iosix?.oilPressureKpa ?? null,
+        fuelRateGph: iosix?.fuelRateGph ?? null,
+        totalFuelUsedGal: iosix?.totalFuelUsedGal ?? null,
+        engineHours: iosix?.engineHours ?? null,
+        throttlePct: iosix?.throttlePct ?? null,
+        batteryVoltage: iosix?.batteryVoltage ?? null,
+        odometerMiles: iosix?.odometerMiles ?? null,
+        tripMiles: iosix?.tripMiles ?? null,
+        currentGear: iosix?.currentGear ?? null,
+        dpfSootLoadPct: iosix?.dpfSootLoadPct ?? null,
+        defLevelPct: iosix?.defLevelPct ?? null,
+        activeDtcCount: iosix?.activeDtcCount ?? null,
+        activeDtcCodes: iosix?.activeDtcCodes ?? null,
+        eldConnected: iosix?.connected ?? false,
+        eldMac: iosix?.connected ? IOSIX_MAC : null,
+        eldPacketCycleComplete: iosix?.packetCycleComplete ?? false,
       }),
     });
 
@@ -46,7 +72,8 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }: any) =>
           longitude: location.coords.longitude,
         },
       });
-      console.log("[BGTask] GPS ping sent:", location.coords.latitude, location.coords.longitude);
+      const iosixInfo = iosix?.connected ? ` iosix=ok rpm=${iosix.rpm ?? "-"} fuel=${iosix.fuelRateGph ?? "-"}gph` : "";
+      console.log("[BGTask] GPS ping sent:", location.coords.latitude, location.coords.longitude, iosixInfo);
     }
   } catch (err) {
     console.error("[BGTask] Failed to send ping:", err);

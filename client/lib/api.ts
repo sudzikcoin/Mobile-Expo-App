@@ -1,5 +1,7 @@
 import { getApiUrl } from "@/lib/query-client";
 import { Load, Stop, LoadStatus, StopStatus, StopType } from "./types";
+import { IOSiXData } from "./iosix/types";
+import { IOSIX_MAC } from "./iosix/service";
 
 const PRODUCTION_API_BASE = "https://pingpoint.suverse.io";
 
@@ -44,6 +46,41 @@ interface PingPayload {
   accuracy: number;
   speed: number | null;
   heading: number | null;
+  iosix?: IOSiXData | null;
+}
+
+// Build the wire-body for /api/driver/:token/ping. All IOSiX fields are
+// flat + nullable; server accepts whichever are present and ignores the
+// rest (see server/routes.ts :: extractIosixPingFields).
+function buildPingBody(payload: PingPayload): Record<string, unknown> {
+  const t = payload.iosix ?? null;
+  return {
+    lat: payload.lat,
+    lng: payload.lng,
+    accuracy: payload.accuracy,
+    speed: payload.speed,
+    // Prefer IOSiX GPS heading when available, else phone heading.
+    heading: t?.heading ?? payload.heading,
+    rpm: t?.rpm ?? null,
+    engineLoadPct: t?.engineLoadPct ?? null,
+    coolantTempC: t?.coolantTempC ?? null,
+    oilPressureKpa: t?.oilPressureKpa ?? null,
+    fuelRateGph: t?.fuelRateGph ?? null,
+    totalFuelUsedGal: t?.totalFuelUsedGal ?? null,
+    engineHours: t?.engineHours ?? null,
+    throttlePct: t?.throttlePct ?? null,
+    batteryVoltage: t?.batteryVoltage ?? null,
+    odometerMiles: t?.odometerMiles ?? null,
+    tripMiles: t?.tripMiles ?? null,
+    currentGear: t?.currentGear ?? null,
+    dpfSootLoadPct: t?.dpfSootLoadPct ?? null,
+    defLevelPct: t?.defLevelPct ?? null,
+    activeDtcCount: t?.activeDtcCount ?? null,
+    activeDtcCodes: t?.activeDtcCodes ?? null,
+    eldConnected: t?.connected ?? false,
+    eldMac: t?.connected ? IOSIX_MAC : null,
+    eldPacketCycleComplete: t?.packetCycleComplete ?? false,
+  };
 }
 
 interface ActionResponse {
@@ -206,11 +243,14 @@ export async function sendLocationPing(
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(buildPingBody(payload)),
       });
 
       if (response.ok) {
-        console.log(`[GPS] Ping sent successfully: ${payload.lat}, ${payload.lng}`);
+        const iosixInfo = payload.iosix?.connected
+          ? ` iosix=ok rpm=${payload.iosix.rpm ?? "-"} fuel=${payload.iosix.fuelRateGph ?? "-"}gph`
+          : "";
+        console.log(`[GPS] Ping sent successfully: ${payload.lat}, ${payload.lng}${iosixInfo}`);
         return true;
       }
 

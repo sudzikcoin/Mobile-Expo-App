@@ -18,9 +18,12 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "PingPoint Driver needs your location to track deliveries and share your position with dispatchers.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "PingPoint Driver needs background location access to continue tracking while you're driving.",
+        "NSBluetoothAlwaysUsageDescription": "PingPoint Driver connects to your truck's IOSiX ELD over Bluetooth to report engine telemetry.",
+        "NSBluetoothPeripheralUsageDescription": "PingPoint Driver connects to your truck's IOSiX ELD over Bluetooth to report engine telemetry.",
         "UIBackgroundModes": [
           "location",
-          "location"
+          "location",
+          "bluetooth-central"
         ],
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -41,7 +44,15 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION"
+        "FOREGROUND_SERVICE_LOCATION",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN"
       ],
       "intentFilters": [
         {
@@ -104,7 +115,15 @@
       ],
       "./plugins/withMonitoringTool",
       "expo-task-manager",
-      "./plugins/withBootReceiver"
+      "./plugins/withBootReceiver",
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": true,
+          "modes": ["central"],
+          "bluetoothAlwaysPermission": "PingPoint Driver connects to your truck's IOSiX ELD over Bluetooth to report engine telemetry."
+        }
+      ]
     ],
     "experiments": {
       "reactCompiler": true

@@ -15,6 +15,7 @@ import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/
 import { isStopCurrent } from "@/lib/mock-data";
 import { useDriver } from "@/lib/driver-context";
 import { useAppTheme } from "@/lib/theme-context";
+import { useIOSiXTelemetry } from "@/lib/iosix/hook";
 import type { DrawerParamList } from "@/navigation/DrawerNavigator";
 
 type DashboardRouteProp = RouteProp<DrawerParamList, "Dashboard">;
@@ -40,6 +41,8 @@ export default function DashboardScreen() {
     handleStopAction,
     setToken,
   } = useDriver();
+
+  const iosix = useIOSiXTelemetry(true);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -158,8 +161,8 @@ export default function DashboardScreen() {
 
             {isLocationEnabled ? (
               <View style={[
-                styles.gpsIndicator, 
-                { 
+                styles.gpsIndicator,
+                {
                   backgroundColor: isArcade ? "rgba(0, 217, 255, 0.1)" : "rgba(255, 255, 255, 0.05)",
                   borderColor: isArcade ? PingPointColors.cyan : colors.border,
                   borderRadius: colors.borderRadius,
@@ -176,6 +179,45 @@ export default function DashboardScreen() {
                 ) : null}
               </View>
             ) : null}
+
+            <View style={[
+              styles.gpsIndicator,
+              {
+                backgroundColor: isArcade ? "rgba(0, 217, 255, 0.1)" : "rgba(255, 255, 255, 0.05)",
+                borderColor: isArcade ? PingPointColors.cyan : colors.border,
+                borderRadius: colors.borderRadius,
+              }
+            ]}>
+              <View style={styles.gpsStatusRow}>
+                <View
+                  style={[
+                    styles.gpsDot,
+                    {
+                      backgroundColor: iosix.connected
+                        ? (isArcade ? "#00ff88" : "#ffffff")
+                        : iosix.scanning
+                        ? "#3498db"
+                        : "#7f8c8d",
+                    },
+                  ]}
+                />
+                <ThemedText
+                  style={[
+                    styles.gpsStatusText,
+                    { color: isArcade ? PingPointColors.cyan : "#ffffff" },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {iosix.connected
+                    ? `ELD${iosix.telemetry.rpm !== null ? ` · ${Math.round(iosix.telemetry.rpm)} RPM` : ""}${iosix.telemetry.fuelRateGph !== null ? ` · ${iosix.telemetry.fuelRateGph.toFixed(1)} gal/h` : ""}${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}`
+                    : iosix.scanning
+                    ? "Scanning for ELD..."
+                    : iosix.error === "ble_permission_denied"
+                    ? "ELD: Bluetooth permission denied"
+                    : "ELD Not Connected"}
+                </ThemedText>
+              </View>
+            </View>
 
             <View style={styles.stopsSection}>
               <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>STOPS</ThemedText>
