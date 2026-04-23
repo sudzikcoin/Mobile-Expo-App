@@ -290,6 +290,51 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     getIOSiXService().start().catch(() => {});
   }, []);
 
+  // Wire ELD-driven auto arrive/depart: service evaluates speed + distance
+  // to load stops on each telemetry cycle and fires the callbacks when the
+  // geofence + dwell conditions are met. Reconfigured whenever the load or
+  // token changes so stale coords/handlers aren't held.
+  useEffect(() => {
+    const svc = getIOSiXService();
+    svc.setRawLogToken(token);
+    if (!token || !load) {
+      svc.configureAutoArriveDepart(null);
+      return;
+    }
+    const stops = load.stops
+      .filter((s) => s.lat != null && s.lng != null)
+      .map((s) => ({
+        id: s.id,
+        type: s.type,
+        lat: s.lat as number,
+        lng: s.lng as number,
+        arrivedAt: s.arrivedAt ?? null,
+        departedAt: s.departedAt ?? null,
+      }));
+    svc.configureAutoArriveDepart({
+      token,
+      stops,
+      onArrive: async (stopId) => {
+        try {
+          await markStopArrival(token, stopId);
+          await addLog({ action: "ARRIVE", stopId, stopName: load.stops.find((x) => x.id === stopId)?.companyName });
+          await refreshLoad();
+        } catch (err) {
+          console.error("[AutoAD] arrive failed:", err);
+        }
+      },
+      onDepart: async (stopId) => {
+        try {
+          await markStopDeparture(token, stopId);
+          await addLog({ action: "DEPART", stopId, stopName: load.stops.find((x) => x.id === stopId)?.companyName });
+          await refreshLoad();
+        } catch (err) {
+          console.error("[AutoAD] depart failed:", err);
+        }
+      },
+    });
+  }, [token, load, refreshLoad]);
+
   useEffect(() => {
     const init = async () => {
       try {

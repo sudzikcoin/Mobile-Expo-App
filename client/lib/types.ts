@@ -13,6 +13,8 @@ export interface Stop {
   address: string;
   // Полный адрес (если доступен с сервера) — используется для отображения вместо city/state
   fullAddress?: string;
+  lat?: number | null;
+  lng?: number | null;
   scheduledTime: string;
   arrivedAt?: string;
   departedAt?: string;
