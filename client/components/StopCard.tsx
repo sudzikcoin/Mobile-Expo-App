@@ -33,8 +33,8 @@ export default function StopCard({ stop, isCurrent, onAction, isLoading }: StopC
     <View
       style={[
         styles.container,
-        { 
-          backgroundColor: completed ? colors.surfaceLight : colors.surface,
+        {
+          backgroundColor: colors.surfaceLight,
           borderColor: isCurrent ? (isArcade ? PingPointColors.cyan : "#ffffff") : colors.border,
           borderRadius: colors.borderRadius,
         },
@@ -93,7 +93,7 @@ export default function StopCard({ stop, isCurrent, onAction, isLoading }: StopC
           <Feather
             name="clock"
             size={12}
-            color={completed ? PingPointColors.textMuted : PingPointColors.textSecondary}
+            color={completed ? PingPointColors.textMuted : "#FFFFFF"}
           />
           <ThemedText style={[styles.time, completed && styles.textCompleted]}>
             {formatDateTime(stop.scheduledTime)}
@@ -211,12 +211,12 @@ const styles = StyleSheet.create({
   },
   location: {
     ...Typography.small,
-    color: PingPointColors.textSecondary,
+    color: "#FFFFFF",
     marginBottom: 2,
   },
   address: {
     ...Typography.caption,
-    color: PingPointColors.textSecondary,
+    color: "#FFFFFF",
     marginBottom: Spacing.sm,
   },
   timeRow: {
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
   },
   time: {
     ...Typography.caption,
-    color: PingPointColors.textSecondary,
+    color: "#FFFFFF",
   },
   textCompleted: {
     color: PingPointColors.textMuted,

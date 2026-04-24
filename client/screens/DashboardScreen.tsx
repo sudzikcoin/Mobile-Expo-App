@@ -53,6 +53,14 @@ export default function DashboardScreen() {
       setToken(routeToken);
     }
   }, [route.params?.token, token, setToken]);
+
+  useEffect(() => {
+    if (!token) return;
+    const interval = setInterval(() => {
+      refreshLoad();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [token, refreshLoad]);
   const [rewardPoints, setRewardPoints] = useState(0);
   const [showReward, setShowReward] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
