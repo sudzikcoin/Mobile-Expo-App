@@ -103,13 +103,13 @@ export async function startBackgroundLocationTracking(): Promise<boolean> {
     }
 
     await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-      accuracy: Location.Accuracy.Balanced,
-      timeInterval: 60000,       // каждые 60 секунд
-      distanceInterval: 200,     // или каждые 200 метров
+      accuracy: Location.Accuracy.High,
+      timeInterval: 10000,
+      distanceInterval: 50,
       foregroundService: {
-        notificationTitle: "PingPoint Tracking",
-        notificationBody: "GPS location sharing is active",
-        notificationColor: "#00d9ff",
+        notificationTitle: "PingPoint Tracking Active",
+        notificationBody: "Отслеживание местоположения водителя",
+        notificationColor: "#FACC15",
       },
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
