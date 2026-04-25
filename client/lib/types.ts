@@ -43,7 +43,16 @@ export interface DriverData {
 export interface LogEntry {
   id: string;
   timestamp: string;
-  action: "ARRIVE" | "DEPART" | "LOCATION_PING" | "LOCATION_ENABLED" | "LOCATION_DISABLED";
+  action:
+    | "ARRIVE"
+    | "DEPART"
+    | "LOCATION_PING"
+    | "LOCATION_ENABLED"
+    | "LOCATION_DISABLED"
+    | "BG_HEARTBEAT_OK"
+    | "BG_HEARTBEAT_DEAD_RESTART"
+    | "FCM_TOKEN_REGISTERED"
+    | "FCM_PING_TRIGGERED";
   stopId?: string;
   stopName?: string;
   location?: {

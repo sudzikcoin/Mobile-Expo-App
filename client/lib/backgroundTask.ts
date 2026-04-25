@@ -107,15 +107,16 @@ export async function startBackgroundLocationTracking(): Promise<boolean> {
       timeInterval: 10000,
       distanceInterval: 50,
       foregroundService: {
-        notificationTitle: "PingPoint Tracking Active",
-        notificationBody: "Отслеживание местоположения водителя",
-        notificationColor: "#FACC15",
+        notificationTitle: "PingPoint Tracking — DO NOT CLOSE",
+        notificationBody: "GPS активен. Закрытие остановит трекинг.",
+        notificationColor: "#FF0000",
       },
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
     });
 
     console.log("[BGTask] Background location tracking started");
+    startHeartbeatWatchdog();
     return true;
   } catch (err) {
     console.error("[BGTask] Failed to start background tracking:", err);
@@ -125,6 +126,7 @@ export async function startBackgroundLocationTracking(): Promise<boolean> {
 
 export async function stopBackgroundLocationTracking(): Promise<void> {
   try {
+    stopHeartbeatWatchdog();
     const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
     if (isRegistered) {
       await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
@@ -140,5 +142,51 @@ export async function isBackgroundTrackingActive(): Promise<boolean> {
     return await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
   } catch {
     return false;
+  }
+}
+
+// Watchdog: каждые 30 сек проверяет, что Location task жив,
+// и рестартит startLocationUpdatesAsync, если он умер
+// (Android может убить background-сервис при экстремальном дозинге).
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+export function startHeartbeatWatchdog(): void {
+  if (heartbeatTimer) return;
+  heartbeatTimer = setInterval(async () => {
+    try {
+      const alive = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+      const ts = new Date().toISOString();
+      if (alive) {
+        console.log(`[BGTask][HB ${ts}] Location task alive`);
+        try { await addLog({ action: "BG_HEARTBEAT_OK" }); } catch {}
+      } else {
+        console.warn(`[BGTask][HB ${ts}] Location task DEAD — restarting`);
+        try { await addLog({ action: "BG_HEARTBEAT_DEAD_RESTART" }); } catch {}
+        await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 10000,
+          distanceInterval: 50,
+          foregroundService: {
+            notificationTitle: "PingPoint Tracking — DO NOT CLOSE",
+            notificationBody: "GPS активен. Закрытие остановит трекинг.",
+            notificationColor: "#FF0000",
+          },
+          pausesUpdatesAutomatically: false,
+          showsBackgroundLocationIndicator: true,
+        });
+        console.log("[BGTask][HB] Restart issued");
+      }
+    } catch (err) {
+      console.error("[BGTask][HB] Heartbeat error:", err);
+    }
+  }, 30_000);
+  console.log("[BGTask] Heartbeat watchdog started (30s)");
+}
+
+export function stopHeartbeatWatchdog(): void {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+    console.log("[BGTask] Heartbeat watchdog stopped");
   }
 }
