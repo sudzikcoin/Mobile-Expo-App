@@ -42,3 +42,6 @@ app-example
 /ios
 /android
 .env
+
+# Firebase admin SDK secret (defense in depth)
+firebase-service-account.json
