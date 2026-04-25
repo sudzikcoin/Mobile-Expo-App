@@ -13,6 +13,12 @@ import { fetchDriverLoad, sendLocationPing, markStopArrival, markStopDeparture }
 import { Load } from "./types";
 import { getFreshTelemetry } from "./iosix/store";
 import { getIOSiXService } from "./iosix/service";
+import {
+  registerFcmTokenForDriver,
+  subscribeToFcmTokenRefresh,
+  handleFcmDataMessage,
+} from "./fcm";
+import messaging from "@react-native-firebase/messaging";
 
 const GPS_PING_INTERVAL = 60000;
 
@@ -48,6 +54,8 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
+  const fcmRefreshUnsubRef = useRef<(() => void) | null>(null);
+  const fcmFgUnsubRef = useRef<(() => void) | null>(null);
 
   const parseTokenFromUrl = (url: string): string | null => {
     try {
@@ -101,6 +109,25 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     await saveDriverToken(newToken);
     setTokenState(newToken);
     setError(null);
+
+    // Register the device's FCM token with the backend so the server-side
+    // cron can wake us with silent pushes. Fire-and-forget; failures are
+    // logged but don't block login.
+    void registerFcmTokenForDriver(newToken);
+    // Replace any prior refresh / fg subscriptions tied to an old token.
+    if (fcmRefreshUnsubRef.current) {
+      fcmRefreshUnsubRef.current();
+      fcmRefreshUnsubRef.current = null;
+    }
+    if (fcmFgUnsubRef.current) {
+      fcmFgUnsubRef.current();
+      fcmFgUnsubRef.current = null;
+    }
+    fcmRefreshUnsubRef.current = subscribeToFcmTokenRefresh(newToken);
+    fcmFgUnsubRef.current = messaging().onMessage(async (msg) => {
+      console.log("[FCM][fg] message received");
+      await handleFcmDataMessage(msg, "fcm_fg");
+    });
   };
 
   const refreshLoad = useCallback(async () => {
@@ -433,6 +460,20 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     const interval = setInterval(checkNewLoad, 30000);
     return () => clearInterval(interval);
   }, [token]);
+
+  // Tear down FCM listeners on unmount.
+  useEffect(() => {
+    return () => {
+      if (fcmRefreshUnsubRef.current) {
+        fcmRefreshUnsubRef.current();
+        fcmRefreshUnsubRef.current = null;
+      }
+      if (fcmFgUnsubRef.current) {
+        fcmFgUnsubRef.current();
+        fcmFgUnsubRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <DriverContext.Provider

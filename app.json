@@ -36,6 +36,7 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.pingpoint.driver",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -124,6 +125,15 @@
           "isBackgroundEnabled": true,
           "modes": ["central"],
           "bluetoothAlwaysPermission": "PingPoint Driver connects to your truck's IOSiX ELD over Bluetooth to report engine telemetry."
+        }
+      ],
+      "@react-native-firebase/app",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraMavenRepos": []
+          }
         }
       ]
     ],
