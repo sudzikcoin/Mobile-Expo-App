@@ -14,6 +14,7 @@ import HistoryScreen from "@/screens/HistoryScreen";
 import LogsScreen from "@/screens/LogsScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
 import LoadDetailsScreen from "@/screens/LoadDetailsScreen";
+import TrackingStatusScreen from "@/screens/TrackingStatusScreen";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { ThemedText } from "@/components/ThemedText";
 import { useAppTheme } from "@/lib/theme-context";
@@ -25,6 +26,7 @@ export type DrawerParamList = {
   History: undefined;
   Logs: undefined;
   Settings: undefined;
+  TrackingStatus: undefined;
 };
 
 const Drawer = createDrawerNavigator<DrawerParamList>();
@@ -115,6 +117,16 @@ export default function DrawerNavigator() {
           drawerLabel: "Logs",
           drawerIcon: ({ color, size }) => (
             <Feather name="file-text" size={size} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="TrackingStatus"
+        component={TrackingStatusScreen}
+        options={{
+          drawerLabel: "Tracking Status",
+          drawerIcon: ({ color, size }) => (
+            <Feather name="navigation" size={size} color={color} />
           ),
         }}
       />
