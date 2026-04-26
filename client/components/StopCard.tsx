@@ -211,11 +211,15 @@ const styles = StyleSheet.create({
   },
   location: {
     ...Typography.small,
+    fontSize: 22,
+    fontWeight: "600",
     color: "#FFFFFF",
     marginBottom: 2,
   },
   address: {
     ...Typography.caption,
+    fontSize: 18,
+    fontWeight: "500",
     color: "#FFFFFF",
     marginBottom: Spacing.sm,
   },
@@ -226,6 +230,8 @@ const styles = StyleSheet.create({
   },
   time: {
     ...Typography.caption,
+    fontSize: 16,
+    fontWeight: "500",
     color: "#FFFFFF",
   },
   textCompleted: {
