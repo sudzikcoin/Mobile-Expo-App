@@ -17,6 +17,16 @@
         "EXPO_PUBLIC_AGENTOS_INTERNAL_KEY": "pingpoint-internal-2024"
       }
     },
+    "preview-debug": {
+      "distribution": "internal",
+      "android": {
+        "gradleCommand": ":app:assembleDebug",
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_AGENTOS_INTERNAL_KEY": "pingpoint-internal-2024"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "android": {
