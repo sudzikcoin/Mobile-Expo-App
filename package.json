@@ -14,7 +14,9 @@
     "lint:fix": "npx expo lint --fix",
     "check:types": "tsc --noEmit",
     "check:format": "prettier --check \"**/*.{js,ts,tsx,css,json}\"",
-    "format": "prettier --write \"**/*.{js,ts,tsx,css,json}\""
+    "format": "prettier --write \"**/*.{js,ts,tsx,css,json}\"",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -33,6 +35,7 @@
     "expo-blur": "^15.0.7",
     "expo-build-properties": "~1.0.10",
     "expo-constants": "~18.0.9",
+    "expo-dev-client": "~6.0.20",
     "expo-font": "~14.0.9",
     "expo-glass-effect": "~0.1.6",
     "expo-haptics": "~15.0.7",
