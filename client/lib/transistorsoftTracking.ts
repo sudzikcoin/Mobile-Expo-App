@@ -35,6 +35,9 @@ export async function initTracking(
       autoSync: true,
       batchSync: false,
       maxDaysToPersist: 7,
+      // Flatten body so backend reads lat/lng at root (matches the legacy
+      // expo-location ping shape — easier backwards compat).
+      httpRootProperty: ".",
 
       headers: {
         "Content-Type": "application/json",
