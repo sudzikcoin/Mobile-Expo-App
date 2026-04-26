@@ -116,6 +116,7 @@ module.exports = {
       "./plugins/withMonitoringTool",
       "expo-task-manager",
       "./plugins/withBootReceiver",
+      "./plugins/withBundleInDebug",
       [
         "react-native-ble-plx",
         {
