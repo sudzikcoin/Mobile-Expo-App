@@ -269,10 +269,15 @@ class IOSiXService {
             return;
           }
           if (!char?.value) return;
+          // Keep the original base64 for raw-log upload — the server-side
+          // reassembly expects the unmodified BLE notify bytes.
           this.appendRawLog(char.value);
           try {
             const raw = base64ToAscii(char.value);
-            this.ingestFrame(raw);
+            // First byte of every BLE notify is a 1-byte sequence counter
+            // (server strips identically in ingestIosixPingsFromRaw).
+            const stripped = raw.length > 0 ? raw.slice(1) : raw;
+            this.ingestFrame(stripped);
           } catch {}
         }
       );
@@ -283,17 +288,16 @@ class IOSiXService {
   }
 
   private ingestFrame(raw: string): void {
-    const parts = raw.split(/[\r\n]+/).filter((p) => p.length > 0);
-    const lines = parts.length > 0 ? parts : [raw];
-    for (const line of lines) {
-      const cycle = this.buffer.push(line);
-      if (cycle) {
-        cycle.connected = true;
-        cycle.signalDbm = this.state.lastRssi;
-        this.update({ telemetry: cycle });
-        setSnapshot(cycle);
-        this.evaluateAutoArriveDepart(cycle);
-      }
+    // Pass the raw fragment through without splitting on CRLF — the parser
+    // is now a streaming buffer that needs to see \r\n boundaries to know
+    // when a packet is complete.
+    const cycle = this.buffer.push(raw);
+    if (cycle) {
+      cycle.connected = true;
+      cycle.signalDbm = this.state.lastRssi;
+      this.update({ telemetry: cycle });
+      setSnapshot(cycle);
+      this.evaluateAutoArriveDepart(cycle);
     }
   }
 
