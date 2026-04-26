@@ -127,6 +127,14 @@ module.exports = {
       ],
       "@react-native-firebase/app",
       [
+        "react-native-background-geolocation",
+        {
+          // Empty in debug; Block 9 plants the production key from env.
+          license: process.env.TRANSISTORSOFT_LICENSE || "",
+        },
+      ],
+      "react-native-background-fetch",
+      [
         "expo-build-properties",
         {
           android: { extraMavenRepos: [] },
