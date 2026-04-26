@@ -19,6 +19,7 @@
     },
     "preview-debug": {
       "distribution": "internal",
+      "autoIncrement": true,
       "android": {
         "gradleCommand": ":app:assembleDebug",
         "buildType": "apk"
