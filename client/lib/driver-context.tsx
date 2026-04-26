@@ -52,6 +52,21 @@ interface DriverContextType {
 
 const DriverContext = createContext<DriverContextType | undefined>(undefined);
 
+// Safety net: if the transistorsoft SDK ever hangs in ready()/stop() (seen
+// once on Android 10 when the location provider was mid-toggle), make sure
+// we surface the failure instead of leaving the UI stuck on "loading".
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`${label} timed out after ${ms}ms`)),
+        ms,
+      ),
+    ),
+  ]);
+}
+
 export function DriverProvider({ children }: { children: ReactNode }) {
   const [token, setTokenState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -190,13 +205,21 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       console.warn("[Driver] Skipping tracking init: missing truck_id");
       return;
     }
-    await initTracking(token, truckId);
-    console.log("[Driver] Transistorsoft tracking started");
+    try {
+      await withTimeout(initTracking(token, truckId), 15000, "initTracking");
+      console.log("[Driver] Transistorsoft tracking started");
+    } catch (err) {
+      console.error("[Driver] startLocationTracking failed:", err);
+    }
   }, [token]);
 
   const stopLocationTracking = useCallback(async () => {
-    await stopTracking();
-    console.log("[Driver] Transistorsoft tracking stopped");
+    try {
+      await withTimeout(stopTracking(), 15000, "stopTracking");
+      console.log("[Driver] Transistorsoft tracking stopped");
+    } catch (err) {
+      console.error("[Driver] stopLocationTracking failed:", err);
+    }
   }, []);
 
   const openSettings = async () => {
@@ -214,16 +237,17 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
     try {
       if (!isLocationEnabled) {
-        // Transistorsoft prompts for location permission internally on
-        // start(); the SDK fires onProviderChange when the user denies.
-        // We persist intent here either way so a re-open can re-prompt.
+        // Flip persisted intent + state only. The useEffect on
+        // [token, isLocationEnabled] is the single owner of start/stop —
+        // calling startLocationTracking() here too would race the effect
+        // (effect's cleanup from the previous render fires first, then a
+        // fresh effect run, plus our direct call = two starts overlapping).
+        // Transistorsoft prompts for permission internally on start().
         setIsLocationDenied(false);
         await saveLocationEnabled(true);
         await addLog({ action: "LOCATION_ENABLED" });
         setIsLocationEnabled(true);
-        await startLocationTracking();
       } else {
-        await stopLocationTracking();
         await saveLocationEnabled(false);
         await addLog({ action: "LOCATION_DISABLED" });
         setIsLocationEnabled(false);
