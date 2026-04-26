@@ -23,8 +23,8 @@ import {
   setCompanyId,
   setCompanyName,
   setDriverName,
-  setTruckToken,
 } from "@/lib/storage";
+import { useDriver } from "@/lib/driver-context";
 
 const AGENTOS_BASE = "https://agentos.suverse.io";
 const AGENTOS_KEY = process.env.EXPO_PUBLIC_AGENTOS_INTERNAL_KEY || "pingpoint-internal-2024";
@@ -48,6 +48,7 @@ interface TruckSetupScreenProps {
 export default function TruckSetupScreen({ onComplete }: TruckSetupScreenProps) {
   const insets = useSafeAreaInsets();
   const { isArcade } = useAppTheme();
+  const { setToken } = useDriver();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -167,7 +168,7 @@ export default function TruckSetupScreen({ onComplete }: TruckSetupScreenProps) 
         throw new Error("register: no token in response");
       }
 
-      await setTruckToken(body.token);
+      await setToken(body.token);
       await setTruckId(selectedTruck.id);
       await setTruckNumber(selectedTruck.truckNumber);
       await setCompanyId(selectedCompany.id);
