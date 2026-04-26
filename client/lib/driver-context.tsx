@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import * as Linking from "expo-linking";
-import * as Location from "expo-location";
 import { Platform } from "react-native";
 
 import {
@@ -12,23 +11,20 @@ import {
   getActiveToken,
   getTruckToken,
   setTruckToken,
+  getTruckId,
   isTruckToken,
 } from "./storage";
 import {
-  startBackgroundLocationTracking,
-  stopBackgroundLocationTracking,
-  isBackgroundTrackingActive,
-} from "./backgroundTask";
+  initTracking,
+  stopTracking,
+} from "./transistorsoftTracking";
 import {
   fetchDriverLoad,
-  sendLocationPing,
   markStopArrival,
   markStopDeparture,
   fetchActiveLoadForTruck,
-  sendTruckPing,
 } from "./api";
 import { Load } from "./types";
-import { getFreshTelemetry } from "./iosix/store";
 import { getIOSiXService } from "./iosix/service";
 import {
   registerFcmTokenForDriver,
@@ -36,8 +32,6 @@ import {
   handleFcmDataMessage,
 } from "./fcm";
 import messaging from "@react-native-firebase/messaging";
-
-const GPS_PING_INTERVAL = 60000;
 
 interface DriverContextType {
   token: string | null;
@@ -69,8 +63,6 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   const [isLocationDenied, setIsLocationDenied] = useState(false);
   const [lastPingTime, setLastPingTime] = useState<Date | null>(null);
   
-  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const fcmRefreshUnsubRef = useRef<(() => void) | null>(null);
   const fcmFgUnsubRef = useRef<(() => void) | null>(null);
 
@@ -185,81 +177,26 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     }
   }, [token]);
 
-  const sendPing = useCallback(async () => {
-    if (!token || !isLocationEnabled) return;
-
-    try {
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      let iosix = null;
-      try {
-        iosix = await getFreshTelemetry();
-      } catch {}
-
-      const payload = {
-        lat: location.coords.latitude,
-        lng: location.coords.longitude,
-        accuracy: location.coords.accuracy || 0,
-        speed: location.coords.speed,
-        heading: location.coords.heading,
-        iosix,
-      };
-      const success = isTruckToken(token)
-        ? await sendTruckPing(token, payload)
-        : await sendLocationPing(token, payload);
-
-      if (success) {
-        setLastPingTime(new Date());
-        await addLog({
-          action: "LOCATION_PING",
-          location: {
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          },
-        });
-      }
-    } catch (err) {
-      console.error("Failed to send GPS ping:", err);
-    }
-  }, [token, isLocationEnabled]);
-
   const startLocationTracking = useCallback(async () => {
-    // Останавливаем старый интервал если был
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = null;
+    if (!token || !isTruckToken(token)) {
+      // Legacy drv_ tokens are not wired to transistorsoft (URL is truck-only).
+      // The deep-link flow will not produce GPS pings until migrated to a
+      // truck token.
+      console.warn("[Driver] Skipping tracking init: not a truck token");
+      return;
     }
-
-    // Запускаем фоновый GPS через expo-task-manager
-    const started = await startBackgroundLocationTracking();
-    
-    if (started) {
-      console.log("[Driver] Background GPS tracking started");
-    } else {
-      // Fallback: если фоновый режим недоступен — используем интервал
-      console.warn("[Driver] Background tracking unavailable, using interval fallback");
-      await sendPing();
-      pingIntervalRef.current = setInterval(sendPing, GPS_PING_INTERVAL);
+    const truckId = await getTruckId();
+    if (!truckId) {
+      console.warn("[Driver] Skipping tracking init: missing truck_id");
+      return;
     }
-  }, [sendPing]);
+    await initTracking(token, truckId);
+    console.log("[Driver] Transistorsoft tracking started");
+  }, [token]);
 
   const stopLocationTracking = useCallback(async () => {
-    // Останавливаем интервал если есть
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = null;
-    }
-
-    if (locationSubscriptionRef.current) {
-      locationSubscriptionRef.current.remove();
-      locationSubscriptionRef.current = null;
-    }
-
-    // Останавливаем фоновый GPS
-    await stopBackgroundLocationTracking();
-    console.log("[Driver] Location tracking stopped");
+    await stopTracking();
+    console.log("[Driver] Transistorsoft tracking stopped");
   }, []);
 
   const openSettings = async () => {
@@ -277,27 +214,16 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
     try {
       if (!isLocationEnabled) {
-        const permissionResult = await Location.requestForegroundPermissionsAsync();
-
-        if (permissionResult.status !== "granted") {
-          setIsLocationLoading(false);
-          
-          if (!permissionResult.canAskAgain) {
-            setIsLocationDenied(true);
-            setError("Location permission denied. Please enable in Settings.");
-          } else {
-            setError("Location permission denied");
-          }
-          return;
-        }
-
+        // Transistorsoft prompts for location permission internally on
+        // start(); the SDK fires onProviderChange when the user denies.
+        // We persist intent here either way so a re-open can re-prompt.
         setIsLocationDenied(false);
         await saveLocationEnabled(true);
         await addLog({ action: "LOCATION_ENABLED" });
         setIsLocationEnabled(true);
         await startLocationTracking();
       } else {
-        stopLocationTracking();
+        await stopLocationTracking();
         await saveLocationEnabled(false);
         await addLog({ action: "LOCATION_DISABLED" });
         setIsLocationEnabled(false);
@@ -406,19 +332,10 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
         setIsLocationEnabled(locationEnabled);
 
-        // Если GPS был включён — перезапускаем трекинг (task manager сбрасывается при перезапуске)
-        if (locationEnabled && savedToken) {
-          setIsLocationEnabled(true);
-          // Запускаем через 2 сек после инициализации токена
-          setTimeout(async () => {
-            const started = await startBackgroundLocationTracking();
-            if (started) {
-              console.log("[Driver] Background GPS restarted on app init");
-            } else {
-              console.warn("[Driver] Background GPS restart failed on init");
-            }
-          }, 2000);
-        }
+        // Transistorsoft survives boot via startOnBoot:true and survives
+        // process kill via stopOnTerminate:false. On a normal cold-start we
+        // still need to call start() to re-attach the JS layer; the useEffect
+        // on [token, isLocationEnabled] below handles that once both land.
       } catch (err) {
         console.error("Failed to initialize:", err);
       } finally {

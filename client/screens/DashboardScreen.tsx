@@ -10,6 +10,7 @@ import DashboardHeader from "@/components/DashboardHeader";
 import LoadCard from "@/components/LoadCard";
 import StopCard from "@/components/StopCard";
 import RewardAnimation from "@/components/RewardAnimation";
+import TrackingDiagnostics from "@/components/TrackingDiagnostics";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { isStopCurrent } from "@/lib/mock-data";
 import { useDriver } from "@/lib/driver-context";
@@ -182,6 +183,8 @@ export default function DashboardScreen() {
                 ) : null}
               </View>
             ) : null}
+
+            {isLocationEnabled ? <TrackingDiagnostics /> : null}
 
             <View style={[
               styles.gpsIndicator,
