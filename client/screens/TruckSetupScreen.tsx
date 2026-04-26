@@ -21,11 +21,14 @@ import {
   setTruckId,
   setTruckNumber,
   setCompanyId,
+  setCompanyName,
   setDriverName,
+  setTruckToken,
 } from "@/lib/storage";
 
 const AGENTOS_BASE = "https://agentos.suverse.io";
 const AGENTOS_KEY = process.env.EXPO_PUBLIC_AGENTOS_INTERNAL_KEY || "pingpoint-internal-2024";
+const PINGPOINT_API = "https://pingpoint.suverse.io";
 
 interface Company {
   id: string;
@@ -52,9 +55,11 @@ export default function TruckSetupScreen({ onComplete }: TruckSetupScreenProps) 
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [selectedTruck, setSelectedTruck] = useState<Truck | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [newDriverName, setNewDriverName] = useState("");
   const [savingName, setSavingName] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   // Шаг 1 — загружаем список компаний
   useEffect(() => {
@@ -65,18 +70,18 @@ export default function TruckSetupScreen({ onComplete }: TruckSetupScreenProps) 
 
   const loadCompanies = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await fetch(`${AGENTOS_BASE}/api/internal/companies`, {
         headers: { "x-internal-key": AGENTOS_KEY },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setCompanies(data.companies || data || []);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setCompanies(data.companies || data || []);
     } catch (err) {
       console.error("[TruckSetup] Failed to load companies:", err);
-      // Показываем заглушку если API недоступен
-      setCompanies([{ id: "548fd10b-bb8a-4771-924c-ed3e863e498d", name: "Suverse Logistics" }]);
+      setCompanies([]);
+      setLoadError("Could not load companies. Check internet and tap Retry.");
     } finally {
       setLoading(false);
     }
@@ -84,16 +89,18 @@ export default function TruckSetupScreen({ onComplete }: TruckSetupScreenProps) 
 
   const loadTrucks = async (companyId: string) => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await fetch(`${AGENTOS_BASE}/api/internal/companies/${companyId}/trucks`, {
         headers: { "x-internal-key": AGENTOS_KEY },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setTrucks(data.trucks || data || []);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setTrucks(data.trucks || data || []);
     } catch (err) {
       console.error("[TruckSetup] Failed to load trucks:", err);
+      setTrucks([]);
+      setLoadError("Could not load trucks. Tap Retry.");
     } finally {
       setLoading(false);
     }
@@ -135,19 +142,47 @@ export default function TruckSetupScreen({ onComplete }: TruckSetupScreenProps) 
   };
 
   const handleConfirm = async () => {
-    if (!selectedTruck || !selectedCompany) return;
+    if (!selectedTruck || !selectedCompany || confirming) return;
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setConfirming(true);
 
     try {
+      // Exchange truck_number + company_id for a permanent trk_xxx token.
+      // Backend pulls the canonical driver_name from AgentOS so any rename
+      // there flows through here without a fresh setup.
+      const res = await fetch(`${PINGPOINT_API}/api/truck/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          truck_number: selectedTruck.truckNumber,
+          company_id: selectedCompany.id,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`register ${res.status}: ${text.slice(0, 120)}`);
+      }
+      const body = await res.json();
+      if (!body?.token) {
+        throw new Error("register: no token in response");
+      }
+
+      await setTruckToken(body.token);
       await setTruckId(selectedTruck.id);
       await setTruckNumber(selectedTruck.truckNumber);
       await setCompanyId(selectedCompany.id);
-      await setDriverName(selectedTruck.driverName);
+      await setCompanyName(selectedCompany.name);
+      await setDriverName(body.driver_name || selectedTruck.driverName);
       await setTruckSetupComplete(true);
       onComplete();
     } catch (err) {
-      console.error("[TruckSetup] Failed to save setup:", err);
-      Alert.alert("Error", "Failed to save setup. Please try again.");
+      console.error("[TruckSetup] Failed to register truck:", err);
+      Alert.alert(
+        "Registration Failed",
+        "Could not register this truck with the server. Check your connection and try again.",
+      );
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -178,6 +213,23 @@ export default function TruckSetupScreen({ onComplete }: TruckSetupScreenProps) 
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={PingPointColors.cyan} />
                 <ThemedText style={styles.loadingText}>Loading companies...</ThemedText>
+              </View>
+            ) : loadError ? (
+              <View style={styles.emptyContainer}>
+                <Feather name="wifi-off" size={40} color={PingPointColors.textMuted} />
+                <ThemedText style={styles.emptyText}>Connection error</ThemedText>
+                <ThemedText style={styles.emptyHint}>{loadError}</ThemedText>
+                <Pressable
+                  onPress={loadCompanies}
+                  style={({ pressed }) => [
+                    styles.confirmButton,
+                    isArcade && Shadows.arcade.cyan,
+                    pressed && styles.confirmButtonPressed,
+                  ]}
+                >
+                  <Feather name="refresh-cw" size={18} color={PingPointColors.background} />
+                  <ThemedText style={styles.confirmButtonText}>RETRY</ThemedText>
+                </Pressable>
               </View>
             ) : (
               <View style={styles.list}>
@@ -216,6 +268,23 @@ export default function TruckSetupScreen({ onComplete }: TruckSetupScreenProps) 
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={PingPointColors.cyan} />
                 <ThemedText style={styles.loadingText}>Loading trucks...</ThemedText>
+              </View>
+            ) : loadError ? (
+              <View style={styles.emptyContainer}>
+                <Feather name="wifi-off" size={40} color={PingPointColors.textMuted} />
+                <ThemedText style={styles.emptyText}>Connection error</ThemedText>
+                <ThemedText style={styles.emptyHint}>{loadError}</ThemedText>
+                <Pressable
+                  onPress={() => selectedCompany && loadTrucks(selectedCompany.id)}
+                  style={({ pressed }) => [
+                    styles.confirmButton,
+                    isArcade && Shadows.arcade.cyan,
+                    pressed && styles.confirmButtonPressed,
+                  ]}
+                >
+                  <Feather name="refresh-cw" size={18} color={PingPointColors.background} />
+                  <ThemedText style={styles.confirmButtonText}>RETRY</ThemedText>
+                </Pressable>
               </View>
             ) : trucks.length === 0 ? (
               <View style={styles.emptyContainer}>
@@ -309,14 +378,22 @@ export default function TruckSetupScreen({ onComplete }: TruckSetupScreenProps) 
             {/* Кнопки */}
             <Pressable
               onPress={handleConfirm}
+              disabled={confirming}
               style={({ pressed }) => [
                 styles.confirmButton,
                 isArcade && Shadows.arcade.cyan,
                 pressed && styles.confirmButtonPressed,
+                confirming && { opacity: 0.6 },
               ]}
             >
-              <Feather name="check" size={20} color={PingPointColors.background} />
-              <ThemedText style={styles.confirmButtonText}>CONFIRM & START</ThemedText>
+              {confirming ? (
+                <ActivityIndicator size="small" color={PingPointColors.background} />
+              ) : (
+                <>
+                  <Feather name="check" size={20} color={PingPointColors.background} />
+                  <ThemedText style={styles.confirmButtonText}>CONFIRM & START</ThemedText>
+                </>
+              )}
             </Pressable>
 
             <ThemedText style={styles.editHint}>

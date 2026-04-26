@@ -3,13 +3,30 @@ import * as Linking from "expo-linking";
 import * as Location from "expo-location";
 import { Platform } from "react-native";
 
-import { getDriverToken, setDriverToken as saveDriverToken, addLog, setLocationEnabled as saveLocationEnabled, isLocationEnabled as getLocationEnabled } from "./storage";
+import {
+  getDriverToken,
+  setDriverToken as saveDriverToken,
+  addLog,
+  setLocationEnabled as saveLocationEnabled,
+  isLocationEnabled as getLocationEnabled,
+  getActiveToken,
+  getTruckToken,
+  setTruckToken,
+  isTruckToken,
+} from "./storage";
 import {
   startBackgroundLocationTracking,
   stopBackgroundLocationTracking,
   isBackgroundTrackingActive,
 } from "./backgroundTask";
-import { fetchDriverLoad, sendLocationPing, markStopArrival, markStopDeparture } from "./api";
+import {
+  fetchDriverLoad,
+  sendLocationPing,
+  markStopArrival,
+  markStopDeparture,
+  fetchActiveLoadForTruck,
+  sendTruckPing,
+} from "./api";
 import { Load } from "./types";
 import { getFreshTelemetry } from "./iosix/store";
 import { getIOSiXService } from "./iosix/service";
@@ -106,7 +123,11 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       return;
     }
     console.log("[Driver] Setting token:", newToken);
-    await saveDriverToken(newToken);
+    if (isTruckToken(newToken)) {
+      await setTruckToken(newToken);
+    } else {
+      await saveDriverToken(newToken);
+    }
     setTokenState(newToken);
     setError(null);
 
@@ -140,8 +161,10 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
     try {
       setError(null);
-      const result = await fetchDriverLoad(token);
-      
+      const result = isTruckToken(token)
+        ? await fetchActiveLoadForTruck(token)
+        : await fetchDriverLoad(token);
+
       if (result) {
         console.log("[Driver] Load fetched successfully:", result.load.loadNumber);
         setLoad(result.load);
@@ -149,7 +172,12 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       } else {
         console.log("[Driver] No load found for token:", token);
         setLoad(null);
-        setError("No active load found");
+        // For truck tokens "no active load" is a normal state — the truck is
+        // registered, just sitting idle waiting for dispatch. Don't surface
+        // an error banner in that case.
+        if (!isTruckToken(token)) {
+          setError("No active load found");
+        }
       }
     } catch (err) {
       console.error("[Driver] Failed to fetch load:", err);
@@ -170,14 +198,17 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         iosix = await getFreshTelemetry();
       } catch {}
 
-      const success = await sendLocationPing(token, {
+      const payload = {
         lat: location.coords.latitude,
         lng: location.coords.longitude,
         accuracy: location.coords.accuracy || 0,
         speed: location.coords.speed,
         heading: location.coords.heading,
         iosix,
-      });
+      };
+      const success = isTruckToken(token)
+        ? await sendTruckPing(token, payload)
+        : await sendLocationPing(token, payload);
 
       if (success) {
         setLastPingTime(new Date());
@@ -365,13 +396,14 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const init = async () => {
       try {
-        const savedToken = await getDriverToken();
+        // Truck token (new flow) takes precedence over per-load drv_xxx.
+        const savedToken = await getActiveToken();
         const locationEnabled = await getLocationEnabled();
-        
+
         if (savedToken) {
           setTokenState(savedToken);
         }
-        
+
         setIsLocationEnabled(locationEnabled);
 
         // Если GPS был включён — перезапускаем трекинг (task manager сбрасывается при перезапуске)
@@ -439,9 +471,12 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   }, [token, isLocationEnabled, startLocationTracking, stopLocationTracking]);
 
 
-  // Polling нового груза каждые 30 секунд
+  // Legacy: per-load drv_xxx token rotation polling. Truck tokens are
+  // permanent — when a new load lands, refreshLoad picks it up via
+  // /api/truck/:token/active-load. So polling is a no-op for trk_*.
   useEffect(() => {
     if (!token || token === "undefined" || token === "null") return;
+    if (isTruckToken(token)) return;
 
     const checkNewLoad = async () => {
       try {

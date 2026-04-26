@@ -1,6 +1,6 @@
 import * as TaskManager from "expo-task-manager";
 import * as Location from "expo-location";
-import { getDriverToken, addLog, isLocationEnabled } from "./storage";
+import { getActiveToken, isTruckToken, addLog, isLocationEnabled } from "./storage";
 import { getFreshTelemetry } from "./iosix/store";
 import { IOSIX_MAC } from "./iosix/service";
 
@@ -21,7 +21,7 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }: any) =>
     const locationEnabled = await isLocationEnabled();
     if (!locationEnabled) return;
 
-    const token = await getDriverToken();
+    const token = await getActiveToken();
     if (!token) return;
 
     const { locations } = data as { locations: Location.LocationObject[] };
@@ -33,7 +33,10 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }: any) =>
       iosix = await getFreshTelemetry();
     } catch {}
 
-    const response = await fetch(`${PINGPOINT_API}/api/driver/${token}/ping`, {
+    const pingPath = isTruckToken(token)
+      ? `/api/truck/${token}/ping`
+      : `/api/driver/${token}/ping`;
+    const response = await fetch(`${PINGPOINT_API}${pingPath}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -103,9 +106,9 @@ export async function startBackgroundLocationTracking(): Promise<boolean> {
     }
 
     await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-      accuracy: Location.Accuracy.High,
-      timeInterval: 10000,
-      distanceInterval: 50,
+      accuracy: Location.Accuracy.Balanced,
+      timeInterval: 120000,
+      distanceInterval: 200,
       foregroundService: {
         notificationTitle: "PingPoint Tracking — DO NOT CLOSE",
         notificationBody: "GPS активен. Закрытие остановит трекинг.",

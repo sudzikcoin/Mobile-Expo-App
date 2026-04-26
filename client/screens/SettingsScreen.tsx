@@ -10,7 +10,8 @@ import { PingPointColors, Spacing, BorderRadius, Typography, Shadows } from "@/c
 import { useAppTheme } from "@/lib/theme-context";
 import { useNavigation } from "@react-navigation/native";
 import { useState, useEffect, useCallback } from "react";
-import { getTruckNumber, getDriverName, setTruckSetupComplete } from "@/lib/storage";
+import { getTruckNumber, getDriverName, getCompanyName, clearTruckSession } from "@/lib/storage";
+import { Alert } from "react-native";
 
 interface SettingRowProps {
   icon: keyof typeof Feather.glyphMap;
@@ -94,12 +95,15 @@ export default function SettingsScreen() {
   const navigation = useNavigation<any>();
   const [truckNumber, setTruckNumberState] = useState<string | null>(null);
   const [driverName, setDriverNameState] = useState<string | null>(null);
+  const [companyName, setCompanyNameState] = useState<string | null>(null);
 
   const loadTruckInfo = useCallback(async () => {
     const t = await getTruckNumber();
     const d = await getDriverName();
+    const c = await getCompanyName();
     setTruckNumberState(t);
     setDriverNameState(d);
+    setCompanyNameState(c);
   }, []);
 
   useEffect(() => {
@@ -112,11 +116,24 @@ export default function SettingsScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    await setTruckSetupComplete(false);
-    navigation.reset({
-      index: 0,
-      routes: [{ name: "TruckSetup" }],
-    });
+    Alert.alert(
+      "Switch Truck?",
+      "This will sign out of the current truck and return you to the picker. Your tracking data on the server is not affected.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Switch",
+          style: "destructive",
+          onPress: async () => {
+            await clearTruckSession();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "TruckSetup" }],
+            });
+          },
+        },
+      ],
+    );
   };
 
 
@@ -204,14 +221,15 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>TRUCK & DRIVER</ThemedText>
+          <SettingRow icon="briefcase" label="Current Company" value={companyName || "Not set"} />
           <SettingRow icon="truck" label="Current Truck" value={truckNumber ? `#${truckNumber}` : "Not set"} />
           <SettingRow icon="user" label="Current Driver" value={driverName || "Not set"} />
-          <SettingRow icon="refresh-cw" label="Change Truck / Driver" onPress={handleChangeTruck} />
+          <SettingRow icon="refresh-cw" label="Switch Truck" onPress={handleChangeTruck} />
         </View>
 
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>APP INFO</ThemedText>
-          <SettingRow icon="info" label="Version" value="1.0.0" />
+          <SettingRow icon="info" label="Version" value="1.1.0" />
           <SettingRow icon="shield" label="Privacy Policy" onPress={() => {}} />
           <SettingRow icon="file-text" label="Terms of Service" onPress={() => {}} />
         </View>

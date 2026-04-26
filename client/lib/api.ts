@@ -187,6 +187,90 @@ async function handleApiResponse<T>(
   }
 }
 
+// ============================================================================
+// Per-truck (trk_xxx) endpoints — new no-login flow.
+// ============================================================================
+
+// Returns load + stops in the same shape as the legacy /api/driver/:token
+// surface, so we can run it through the existing transformAPIResponse mapper.
+export async function fetchActiveLoadForTruck(
+  truckToken: string,
+): Promise<{ load: Load; balance: number; legacyDriverToken: string | null } | null> {
+  const baseUrl = getProductionApiUrl();
+  const url = `${baseUrl}/api/truck/${truckToken}/active-load`;
+  console.log("[API] Fetching truck active load:", url);
+  try {
+    const r = await fetch(url, {
+      method: "GET",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+    });
+    if (!r.ok) {
+      if (r.status === 404) return null;
+      throw new Error(`active-load ${r.status}`);
+    }
+    const body = (await r.json()) as {
+      load: (APILoadResponse & { driverToken?: string }) | null;
+    };
+    if (!body.load) return null;
+    const mapped = transformAPIResponse(body.load);
+    return {
+      load: mapped.load,
+      balance: mapped.balance,
+      legacyDriverToken: body.load.driverToken ?? null,
+    };
+  } catch (e) {
+    console.error("[API] fetchActiveLoadForTruck error:", e);
+    throw e;
+  }
+}
+
+export async function sendTruckPing(
+  truckToken: string,
+  payload: PingPayload,
+  retries = 3,
+): Promise<boolean> {
+  const baseUrl = getProductionApiUrl();
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const url = `${baseUrl}/api/truck/${truckToken}/ping`;
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(buildPingBody(payload)),
+      });
+      if (r.ok) {
+        console.log(`[GPS][truck] ping sent: ${payload.lat},${payload.lng}`);
+        return true;
+      }
+      console.warn(`[GPS][truck] ping ${r.status}, attempt ${attempt + 1}`);
+    } catch (e) {
+      console.warn(`[GPS][truck] ping error attempt ${attempt + 1}:`, e);
+    }
+    if (attempt < retries - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+    }
+  }
+  return false;
+}
+
+export async function registerTruckFcm(
+  truckToken: string,
+  fcmToken: string,
+): Promise<boolean> {
+  const baseUrl = getProductionApiUrl();
+  try {
+    const r = await fetch(`${baseUrl}/api/truck/${truckToken}/fcm-register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fcmToken }),
+    });
+    return r.ok;
+  } catch (e) {
+    console.error("[API] registerTruckFcm error:", e);
+    return false;
+  }
+}
+
 export async function fetchDriverLoad(token: string): Promise<{ load: Load; balance: number } | null> {
   const baseUrl = getProductionApiUrl();
   const url = `${baseUrl}/api/driver/${token}`;

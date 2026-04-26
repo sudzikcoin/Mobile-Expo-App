@@ -3,6 +3,7 @@ import { DriverData, LogEntry, Load } from "./types";
 
 const KEYS = {
   DRIVER_TOKEN: "@pingpoint_driver_token",
+  TRUCK_TOKEN: "@pingpoint_truck_token",
   DRIVER_BALANCE: "@pingpoint_driver_balance",
   CURRENT_LOAD: "@pingpoint_current_load",
   COMPLETED_LOADS: "@pingpoint_completed_loads",
@@ -11,9 +12,22 @@ const KEYS = {
   TRUCK_ID: "@pingpoint_truck_id",
   TRUCK_NUMBER: "@pingpoint_truck_number",
   COMPANY_ID: "@pingpoint_company_id",
+  COMPANY_NAME: "@pingpoint_company_name",
   DRIVER_NAME: "@pingpoint_driver_name",
   TRUCK_SETUP_COMPLETE: "@pingpoint_truck_setup_complete",
 };
+
+// Returns the active token, preferring per-truck (new flow) over per-load (legacy).
+// Calls go to /api/truck/* when token starts with trk_, /api/driver/* otherwise.
+export async function getActiveToken(): Promise<string | null> {
+  const truck = await getTruckToken();
+  if (truck) return truck;
+  return getDriverToken();
+}
+
+export function isTruckToken(t: string | null | undefined): boolean {
+  return typeof t === "string" && t.startsWith("trk_");
+}
 
 export async function getDriverToken(): Promise<string | null> {
   try {
@@ -239,5 +253,60 @@ export async function setTruckId(id: string): Promise<void> {
     await AsyncStorage.setItem(KEYS.TRUCK_ID, id);
   } catch (error) {
     console.error("Failed to set truck id:", error);
+  }
+}
+
+export async function getTruckToken(): Promise<string | null> {
+  try {
+    const t = await AsyncStorage.getItem(KEYS.TRUCK_TOKEN);
+    if (!t || t === "undefined" || t === "null") return null;
+    return t;
+  } catch {
+    return null;
+  }
+}
+
+export async function setTruckToken(token: string): Promise<void> {
+  try {
+    if (!token || token === "undefined" || token === "null") return;
+    await AsyncStorage.setItem(KEYS.TRUCK_TOKEN, token);
+  } catch (error) {
+    console.error("Failed to set truck token:", error);
+  }
+}
+
+export async function getCompanyName(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(KEYS.COMPANY_NAME);
+  } catch {
+    return null;
+  }
+}
+
+export async function setCompanyName(name: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(KEYS.COMPANY_NAME, name);
+  } catch (error) {
+    console.error("Failed to set company name:", error);
+  }
+}
+
+// Wipe everything tied to the current truck/driver session — used by
+// "Switch truck" in Settings to drop the user back at the picker flow.
+export async function clearTruckSession(): Promise<void> {
+  try {
+    await AsyncStorage.multiRemove([
+      KEYS.TRUCK_TOKEN,
+      KEYS.DRIVER_TOKEN,
+      KEYS.TRUCK_ID,
+      KEYS.TRUCK_NUMBER,
+      KEYS.COMPANY_ID,
+      KEYS.COMPANY_NAME,
+      KEYS.DRIVER_NAME,
+      KEYS.TRUCK_SETUP_COMPLETE,
+      KEYS.CURRENT_LOAD,
+    ]);
+  } catch (error) {
+    console.error("Failed to clear truck session:", error);
   }
 }

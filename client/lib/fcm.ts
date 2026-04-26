@@ -2,7 +2,7 @@ import messaging, {
   FirebaseMessagingTypes,
 } from "@react-native-firebase/messaging";
 import * as Location from "expo-location";
-import { addLog, getDriverToken } from "./storage";
+import { addLog, getActiveToken, isTruckToken } from "./storage";
 import { getFreshTelemetry } from "./iosix/store";
 import { IOSIX_MAC } from "./iosix/service";
 
@@ -13,7 +13,7 @@ const PINGPOINT_API = "https://pingpoint.suverse.io";
 // (silent push wakes the app, app sends one ping).
 export async function sendOneGpsPing(reason: string): Promise<boolean> {
   try {
-    const token = await getDriverToken();
+    const token = await getActiveToken();
     if (!token) {
       console.warn("[FCM][ping] no driver token, skip");
       return false;
@@ -34,8 +34,11 @@ export async function sendOneGpsPing(reason: string): Promise<boolean> {
       iosix = await getFreshTelemetry();
     } catch {}
 
+    const pingPath = isTruckToken(token)
+      ? `/api/truck/${token}/ping`
+      : `/api/driver/${token}/ping`;
     const response = await fetch(
-      `${PINGPOINT_API}/api/driver/${token}/ping`,
+      `${PINGPOINT_API}${pingPath}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -98,8 +101,11 @@ async function postFcmTokenToBackend(
   fcmToken: string,
 ): Promise<boolean> {
   try {
+    const path = isTruckToken(driverToken)
+      ? `/api/truck/${driverToken}/fcm-register`
+      : `/api/driver/${driverToken}/fcm-register`;
     const res = await fetch(
-      `${PINGPOINT_API}/api/driver/${driverToken}/fcm-register`,
+      `${PINGPOINT_API}${path}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
