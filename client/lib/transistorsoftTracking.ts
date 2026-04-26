@@ -63,6 +63,18 @@ export async function initTracking(
         priority: BackgroundGeolocation.NOTIFICATION_PRIORITY_DEFAULT,
       },
 
+      // Override transistorsoft's default rationale, which otherwise shows
+      // the placeholder "[CHANGEME] FEATURE X / FEATURE Y" string in the
+      // Android background-location prompt.
+      backgroundPermissionRationale: {
+        title:
+          "Allow PingPoint Driver to access this device's location even when closed or not in use.",
+        message:
+          "PingPoint Driver tracks your truck location to share with dispatchers and brokers. Background location is required to continue tracking when the app is closed or the screen is off.",
+        positiveAction: 'Change to "Allow all the time"',
+        negativeAction: "Cancel",
+      },
+
       // Stay quiet when stopped — don't drain battery on parking.
       preventSuspend: false,
       heartbeatInterval: 0,
