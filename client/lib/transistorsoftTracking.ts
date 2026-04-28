@@ -23,7 +23,7 @@ export async function initTracking(
   if (!isReady) {
     await BackgroundGeolocation.ready({
       desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
-      distanceFilter: 100,
+      distanceFilter: 500,
 
       stopTimeout: 5,
       stopOnTerminate: false,
@@ -91,6 +91,12 @@ export async function initTracking(
       },
     });
   }
+
+  // Force config sync — ready() is no-op on second+ calls (cached
+  // in native storage), so plain JS-side bumps of distanceFilter
+  // etc. don't propagate on APK upgrade. setConfig overwrites
+  // unconditionally.
+  await BackgroundGeolocation.setConfig({ distanceFilter: 500 });
 
   await BackgroundGeolocation.start();
 }
