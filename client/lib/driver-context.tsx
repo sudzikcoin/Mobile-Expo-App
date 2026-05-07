@@ -7,7 +7,6 @@ import {
   setDriverToken as saveDriverToken,
   addLog,
   setLocationEnabled as saveLocationEnabled,
-  isLocationEnabled as getLocationEnabled,
   getActiveToken,
   getTruckToken,
   setTruckToken,
@@ -248,10 +247,8 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         await addLog({ action: "LOCATION_ENABLED" });
         setIsLocationEnabled(true);
       } else {
-        await saveLocationEnabled(false);
-        await addLog({ action: "LOCATION_DISABLED" });
-        setIsLocationEnabled(false);
-        setLastPingTime(null);
+        // Variant 1: one-way toggle. Disable is a no-op for fleet ops.
+        await addLog({ action: "LOCATION_DISABLE_BLOCKED" });
       }
     } catch (err) {
       console.error("Failed to toggle location:", err);
@@ -348,13 +345,14 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       try {
         // Truck token (new flow) takes precedence over per-load drv_xxx.
         const savedToken = await getActiveToken();
-        const locationEnabled = await getLocationEnabled();
+        // Variant 1: tracking always on. Force-persist true so reads stay stable.
+        await saveLocationEnabled(true);
 
         if (savedToken) {
           setTokenState(savedToken);
         }
 
-        setIsLocationEnabled(locationEnabled);
+        setIsLocationEnabled(true);
 
         // Transistorsoft survives boot via startOnBoot:true and survives
         // process kill via stopOnTerminate:false. On a normal cold-start we

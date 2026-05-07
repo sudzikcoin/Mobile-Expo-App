@@ -4,7 +4,7 @@ module.exports = {
   expo: {
     name: "PingPoint Driver",
     slug: "pingpoint-driver",
-    version: "1.6.1",
+    version: "1.6.2",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "pingpoint",
