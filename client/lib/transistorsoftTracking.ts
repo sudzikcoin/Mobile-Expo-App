@@ -2,10 +2,35 @@ import BackgroundGeolocation, {
   State,
   Location,
 } from "react-native-background-geolocation";
+import { PermissionsAndroid, Platform } from "react-native";
 
 const PINGPOINT_BASE = "https://pingpoint.suverse.io";
 
 let isReady = false;
+
+// Android 13+ (API 33) requires runtime grant for POST_NOTIFICATIONS, even
+// when the permission is in the manifest. Without it the foreground-service
+// notification is suppressed and the OS kills the tracking process within
+// ~10s of backgrounding. Older Android and iOS auto-grant.
+export async function requestNotificationPermission(): Promise<boolean> {
+  if (Platform.OS !== "android" || Platform.Version < 33) return true;
+  try {
+    const result = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+      {
+        title: "Allow notifications",
+        message:
+          "PingPoint needs to show a tracking status notification to keep GPS active when the app is in background.",
+        buttonPositive: "OK",
+        buttonNegative: "Cancel",
+      },
+    );
+    return result === PermissionsAndroid.RESULTS.GRANTED;
+  } catch (err) {
+    console.warn("[Permissions] POST_NOTIFICATIONS request failed:", err);
+    return false;
+  }
+}
 
 export interface TrackingDiagnostics {
   state: State;
@@ -21,6 +46,7 @@ export async function initTracking(
   truckId: string,
 ): Promise<void> {
   if (!isReady) {
+    await requestNotificationPermission();
     await BackgroundGeolocation.ready({
       desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
       distanceFilter: 500,
@@ -60,7 +86,10 @@ export async function initTracking(
         title: "PingPoint Driver tracking active",
         text: "Location sharing for dispatch tracking",
         channelName: "PingPoint Tracking",
-        priority: BackgroundGeolocation.NOTIFICATION_PRIORITY_DEFAULT,
+        channelId: "pingpoint_tracking",
+        smallIcon: "drawable/ic_notification",
+        priority: BackgroundGeolocation.NOTIFICATION_PRIORITY_HIGH,
+        sticky: true,
       },
 
       // Override transistorsoft's default rationale, which otherwise shows

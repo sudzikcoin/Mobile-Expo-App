@@ -4,7 +4,7 @@ module.exports = {
   expo: {
     name: "PingPoint Driver",
     slug: "pingpoint-driver",
-    version: "1.5.0",
+    version: "1.6.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "pingpoint",
@@ -117,6 +117,7 @@ module.exports = {
       "expo-task-manager",
       "./plugins/withBootReceiver",
       "./plugins/withBundleInDebug",
+      "./plugins/withNotificationIcon",
       [
         "react-native-ble-plx",
         {
