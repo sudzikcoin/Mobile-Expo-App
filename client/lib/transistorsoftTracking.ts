@@ -106,8 +106,47 @@ export async function initTracking(
 
       // Stay quiet when stopped — don't drain battery on parking.
       preventSuspend: false,
-      heartbeatInterval: 0,
+      heartbeatInterval: 300,
     });
+
+    // Wake every 5min to capture+sync even during Doze — caps the
+    // server-visible delay at ~5min instead of the full 10–13min Doze
+    // flush cycle. Without this, buffered pings sit on-device until
+    // the OS allows the next sync window.
+    BackgroundGeolocation.onHeartbeat(async () => {
+      console.log("[Heartbeat] Tick — capturing location");
+      try {
+        await BackgroundGeolocation.getCurrentPosition({
+          timeout: 30,
+          maximumAge: 10000,
+          desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
+          samples: 1,
+          persist: true,
+        });
+        await BackgroundGeolocation.sync();
+      } catch (err) {
+        console.warn("[Heartbeat] Failed:", err);
+      }
+    });
+
+    // Geofence — pickup/delivery arrival must be on the server within
+    // seconds, not bundled into the next batch flush.
+    BackgroundGeolocation.onGeofence(async (event) => {
+      console.log("[Geofence]", event.action, event.identifier);
+      try {
+        await BackgroundGeolocation.getCurrentPosition({
+          timeout: 30,
+          maximumAge: 5000,
+          desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
+          samples: 1,
+          persist: true,
+        });
+        await BackgroundGeolocation.sync();
+      } catch (err) {
+        console.warn("[Geofence] Sync failed:", err);
+      }
+    });
+
     isReady = true;
   } else {
     // Token / truck may have changed during a session (rare, but supported
