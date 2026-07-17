@@ -12,6 +12,7 @@ import {
   setTruckToken,
   getTruckId,
   isTruckToken,
+  maskToken,
 } from "./storage";
 import {
   initTracking,
@@ -88,14 +89,14 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       // Format: https://domain/driver/drv_xxxxx
       const pathMatch = url.match(/\/driver\/(drv_[a-zA-Z0-9]+)/);
       if (pathMatch) {
-        console.log("[DeepLink] Extracted token from path:", pathMatch[1]);
+        console.log("[DeepLink] Extracted token from path:", maskToken(pathMatch[1]));
         return pathMatch[1];
       }
       
       // Fallback: try any token format after /driver/
       const anyTokenMatch = url.match(/\/driver\/([^/?]+)/);
       if (anyTokenMatch && anyTokenMatch[1]) {
-        console.log("[DeepLink] Extracted token (fallback):", anyTokenMatch[1]);
+        console.log("[DeepLink] Extracted token (fallback):", maskToken(anyTokenMatch[1]));
         return anyTokenMatch[1];
       }
       
@@ -105,13 +106,13 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       
       if (parsed.path?.startsWith("driver/")) {
         const token = parsed.path.replace("driver/", "");
-        console.log("[DeepLink] Token from parsed path:", token);
+        console.log("[DeepLink] Token from parsed path:", maskToken(token));
         return token;
       }
       
       // Check query params
       if (parsed.queryParams?.token) {
-        console.log("[DeepLink] Token from query params:", parsed.queryParams.token);
+        console.log("[DeepLink] Token from query params:", maskToken(parsed.queryParams.token));
         return parsed.queryParams.token as string;
       }
 
@@ -125,10 +126,10 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
   const setToken = async (newToken: string) => {
     if (!newToken || newToken === "undefined" || newToken === "null") {
-      console.warn("[Driver] Attempted to set invalid token:", newToken);
+      console.warn("[Driver] Attempted to set invalid token:", maskToken(newToken));
       return;
     }
-    console.log("[Driver] Setting token:", newToken);
+    console.log("[Driver] Setting token:", maskToken(newToken));
     if (isTruckToken(newToken)) {
       await setTruckToken(newToken);
     } else {
@@ -163,7 +164,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    console.log("[Driver] Refreshing load for token:", token);
+    console.log("[Driver] Refreshing load for token:", maskToken(token));
 
     try {
       setError(null);
@@ -176,7 +177,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         setLoad(result.load);
         setBalance(result.balance);
       } else {
-        console.log("[Driver] No load found for token:", token);
+        console.log("[Driver] No load found for token:", maskToken(token));
         setLoad(null);
         // For truck tokens "no active load" is a normal state — the truck is
         // registered, just sitting idle waiting for dispatch. Don't surface
@@ -393,7 +394,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (token && token !== "undefined" && token !== "null") {
-      console.log("[Driver] Token changed, fetching load:", token);
+      console.log("[Driver] Token changed, fetching load:", maskToken(token));
       setIsLoading(true);
       refreshLoad().finally(() => setIsLoading(false));
     }
@@ -423,7 +424,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         if (!res.ok) return;
         const data = await res.json();
         if (data.hasNewLoad && data.newToken) {
-          console.log("[Driver] New load available, switching to token:", data.newToken);
+          console.log("[Driver] New load available, switching to token:", maskToken(data.newToken));
           await setToken(data.newToken);
         }
       } catch {

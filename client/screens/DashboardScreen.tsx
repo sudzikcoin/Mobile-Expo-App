@@ -14,6 +14,7 @@ import TrackingDiagnostics from "@/components/TrackingDiagnostics";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { isStopCurrent } from "@/lib/mock-data";
 import { useDriver } from "@/lib/driver-context";
+import { maskToken } from "@/lib/storage";
 import { useAppTheme } from "@/lib/theme-context";
 import { useIOSiXTelemetry } from "@/lib/iosix/hook";
 import type { DrawerParamList } from "@/navigation/DrawerNavigator";
@@ -49,7 +50,7 @@ export default function DashboardScreen() {
   useEffect(() => {
     const routeToken = route.params?.token;
     if (routeToken && routeToken !== token) {
-      console.log("[Dashboard] Setting token from route params:", routeToken);
+      console.log("[Dashboard] Setting token from route params:", maskToken(routeToken));
       setToken(routeToken);
     }
   }, [route.params?.token, token, setToken]);

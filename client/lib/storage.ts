@@ -29,6 +29,14 @@ export function isTruckToken(t: string | null | undefined): boolean {
   return typeof t === "string" && t.startsWith("trk_");
 }
 
+// Mask an auth token for logging — keeps the first 8 chars (prefix + a couple
+// random chars, enough to correlate) and hides the secret remainder. Never log
+// a raw token; anything written to console can surface in device logcat.
+export function maskToken(t: unknown): string {
+  if (typeof t !== "string" || t.length === 0) return "<none>";
+  return t.length <= 8 ? "***" : t.slice(0, 8) + "***";
+}
+
 export async function getDriverToken(): Promise<string | null> {
   try {
     const token = await AsyncStorage.getItem(KEYS.DRIVER_TOKEN);
@@ -48,7 +56,7 @@ export async function setDriverToken(token: string): Promise<void> {
   try {
     // Don't save invalid tokens
     if (!token || token === "undefined" || token === "null") {
-      console.warn("[Storage] Attempted to save invalid token:", token);
+      console.warn("[Storage] Attempted to save invalid token:", maskToken(token));
       return;
     }
     await AsyncStorage.setItem(KEYS.DRIVER_TOKEN, token);
