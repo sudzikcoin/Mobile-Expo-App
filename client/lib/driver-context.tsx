@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import * as Linking from "expo-linking";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 
 import {
   getDriverToken,
@@ -137,24 +137,15 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const setToken = async (newToken: string) => {
-    if (!newToken || newToken === "undefined" || newToken === "null") {
-      console.warn("[Driver] Attempted to set invalid token:", maskToken(newToken));
-      return;
-    }
-    console.log("[Driver] Setting token:", maskToken(newToken));
-    if (isTruckToken(newToken)) {
-      await setTruckToken(newToken);
-    } else {
-      await saveDriverToken(newToken);
-    }
-    setTokenState(newToken);
-    setError(null);
-
-    // Register the device's FCM token with the backend so the server-side
-    // cron can wake us with silent pushes. Fire-and-forget; failures are
-    // logged but don't block login.
-    void registerFcmTokenForDriver(newToken);
+  // Register the device's FCM token with the backend and (re)wire the
+  // refresh / foreground-message subscriptions. Must run on EVERY path that
+  // lands a token — including cold start with a saved token — not just the
+  // deep-link login: registration used to live only in setToken(), so a
+  // normally-restarted app never re-registered and the server kept pushing
+  // to a token FCM had long expired ("registration-token-not-registered").
+  const wireFcm = useCallback((driverToken: string) => {
+    // Fire-and-forget; failures are logged but don't block login/startup.
+    void registerFcmTokenForDriver(driverToken);
     // Replace any prior refresh / fg subscriptions tied to an old token.
     if (fcmRefreshUnsubRef.current) {
       fcmRefreshUnsubRef.current();
@@ -164,12 +155,31 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       fcmFgUnsubRef.current();
       fcmFgUnsubRef.current = null;
     }
-    fcmRefreshUnsubRef.current = subscribeToFcmTokenRefresh(newToken);
+    fcmRefreshUnsubRef.current = subscribeToFcmTokenRefresh(driverToken);
     fcmFgUnsubRef.current = messaging().onMessage(async (msg) => {
       console.log("[FCM][fg] message received");
       await handleFcmDataMessage(msg, "fcm_fg");
     });
-  };
+  }, []);
+
+  const setToken = useCallback(
+    async (newToken: string) => {
+      if (!newToken || newToken === "undefined" || newToken === "null") {
+        console.warn("[Driver] Attempted to set invalid token:", maskToken(newToken));
+        return;
+      }
+      console.log("[Driver] Setting token:", maskToken(newToken));
+      if (isTruckToken(newToken)) {
+        await setTruckToken(newToken);
+      } else {
+        await saveDriverToken(newToken);
+      }
+      setTokenState(newToken);
+      setError(null);
+      wireFcm(newToken);
+    },
+    [wireFcm],
+  );
 
   const refreshLoad = useCallback(async () => {
     if (!token || token === "undefined" || token === "null") {
@@ -387,20 +397,33 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
   // Keep native geofences in sync with the active load's stops. Stops without
   // coordinates are skipped inside syncStopGeofences (logged there).
+  // refreshLoad produces a fresh load object on every successful poll, so this
+  // effect fires every ~30s; re-registering an identical geofence set each time
+  // is pure native churn (removeGeofences + addGeofences). Compare by stop
+  // content instead, and record the signature only after a successful sync so
+  // a not-ready/failed attempt is retried on the next poll tick.
+  const lastGeofenceSigRef = useRef<string | null>(null);
+  const geofenceSyncSeqRef = useRef(0);
   useEffect(() => {
     if (!token || !isTruckToken(token)) return;
-    if (!load) {
-      void syncStopGeofences([]);
-      return;
-    }
-    void syncStopGeofences(
-      load.stops.map((s) => ({
-        id: s.id,
-        lat: s.lat,
-        lng: s.lng,
-        radiusM: s.geofenceRadiusM ?? null,
-      })),
-    );
+    const stops = (load?.stops ?? []).map((s) => ({
+      id: s.id,
+      lat: s.lat,
+      lng: s.lng,
+      radiusM: s.geofenceRadiusM ?? null,
+    }));
+    const sig = stops
+      .map((s) => `${s.id}:${s.lat}:${s.lng}:${s.radiusM}`)
+      .join("|");
+    if (sig === lastGeofenceSigRef.current) return;
+    // Seq guard: if the stops change again while a sync is in flight, the
+    // stale completion must not record its signature over the newer one.
+    const seq = ++geofenceSyncSeqRef.current;
+    void syncStopGeofences(stops).then((synced) => {
+      if (synced && seq === geofenceSyncSeqRef.current) {
+        lastGeofenceSigRef.current = sig;
+      }
+    });
   }, [token, load]);
 
   useEffect(() => {
@@ -413,6 +436,10 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
         if (savedToken) {
           setTokenState(savedToken);
+          // Re-register FCM + subscriptions on cold start too. FCM tokens
+          // rotate; a fleet that only deep-links once (then always restarts
+          // normally) would otherwise never report the rotated token.
+          wireFcm(savedToken);
         }
 
         setIsLocationEnabled(true);
@@ -429,7 +456,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     };
 
     init();
-  }, []);
+  }, [wireFcm]);
 
   useEffect(() => {
     const handleUrl = (event: { url: string }) => {
@@ -452,7 +479,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.remove();
     };
-  }, []);
+  }, [setToken]);
 
   useEffect(() => {
     if (token && token !== "undefined" && token !== "null") {
@@ -460,6 +487,35 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       refreshLoad().finally(() => setIsLoading(false));
     }
+  }, [token, refreshLoad]);
+
+  // Poll for load changes at the provider level, independent of which screen
+  // is mounted. New loads have no push channel (FCM data messages are
+  // ping_request-only), so this interval is what surfaces a newly dispatched
+  // load while the app is in the foreground. It used to live in
+  // DashboardScreen only — off that screen the app went blind. RN timers
+  // freeze while the app is backgrounded; the AppState listener below covers
+  // the catch-up when the driver brings the app back.
+  useEffect(() => {
+    if (!token || token === "undefined" || token === "null") return;
+    const interval = setInterval(() => {
+      void refreshLoad();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [token, refreshLoad]);
+
+  // Refresh immediately when the app returns to the foreground: background
+  // JS timers don't fire on Android, so without this the driver reopens the
+  // app onto data as stale as when they left it.
+  useEffect(() => {
+    if (!token || token === "undefined" || token === "null") return;
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "active") {
+        console.log("[Driver] App foregrounded — refreshing load");
+        void refreshLoad();
+      }
+    });
+    return () => sub.remove();
   }, [token, refreshLoad]);
 
   useEffect(() => {
@@ -496,7 +552,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
     const interval = setInterval(checkNewLoad, 30000);
     return () => clearInterval(interval);
-  }, [token]);
+  }, [token, setToken]);
 
   // Tear down FCM listeners on unmount.
   useEffect(() => {

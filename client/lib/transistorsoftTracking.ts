@@ -40,8 +40,12 @@ const DEFAULT_GEOFENCE_RADIUS_M = 3200;
 // coordinates are logged and skipped (after the server-side geocoding fix these
 // should be rare). Registered geofences persist in native storage across app
 // restarts, so re-syncing on every load change keeps them correct.
-export async function syncStopGeofences(stops: GeofenceStop[]): Promise<void> {
-  if (!isReady) return;
+// Returns true only when the set was actually (re)registered — false when the
+// SDK isn't ready yet or the native call failed, so the caller knows to retry.
+export async function syncStopGeofences(
+  stops: GeofenceStop[],
+): Promise<boolean> {
+  if (!isReady) return false;
   const valid: GeofenceStop[] = [];
   for (const s of stops) {
     if (
@@ -57,7 +61,7 @@ export async function syncStopGeofences(stops: GeofenceStop[]): Promise<void> {
   }
   try {
     await BackgroundGeolocation.removeGeofences();
-    if (valid.length === 0) return;
+    if (valid.length === 0) return true;
     await BackgroundGeolocation.addGeofences(
       valid.map((s) => ({
         identifier: s.id,
@@ -70,8 +74,10 @@ export async function syncStopGeofences(stops: GeofenceStop[]): Promise<void> {
       })),
     );
     console.log(`[Geofence] Registered ${valid.length} native geofence(s)`);
+    return true;
   } catch (err) {
     console.warn("[Geofence] Failed to sync geofences:", err);
+    return false;
   }
 }
 

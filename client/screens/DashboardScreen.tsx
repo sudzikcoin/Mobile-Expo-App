@@ -55,13 +55,8 @@ export default function DashboardScreen() {
     }
   }, [route.params?.token, token, setToken]);
 
-  useEffect(() => {
-    if (!token) return;
-    const interval = setInterval(() => {
-      refreshLoad();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [token, refreshLoad]);
+  // Load polling moved to DriverProvider so it runs on every screen, not
+  // just while the Dashboard is mounted. Pull-to-refresh below stays.
   const [rewardPoints, setRewardPoints] = useState(0);
   const [showReward, setShowReward] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
