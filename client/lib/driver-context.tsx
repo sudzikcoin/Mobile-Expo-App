@@ -306,7 +306,12 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   // task (via getFreshTelemetry). The service no-ops if BLE permission
   // is denied or the ELD is out of range — no error surfaces to the user.
   useEffect(() => {
-    getIOSiXService().start().catch(() => {});
+    getIOSiXService().start().catch((err) => {
+      // BLE ELD is supplementary (arrival now runs on native geofences), but a
+      // start failure was previously invisible — log it so a dead ELD link is
+      // diagnosable instead of silent.
+      console.warn("[Driver] IOSiX service start failed:", err);
+    });
   }, []);
 
   // Wire ELD-driven auto arrive/depart: service evaluates speed + distance
