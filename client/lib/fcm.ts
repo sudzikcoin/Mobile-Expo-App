@@ -4,7 +4,7 @@ import messaging, {
 import * as Location from "expo-location";
 import { addLog, getActiveToken, isTruckToken } from "./storage";
 import { getFreshTelemetry } from "./iosix/store";
-import { IOSIX_MAC } from "./iosix/service";
+import { getEldMac } from "./iosix/service";
 
 const PINGPOINT_API = "https://pingpoint.suverse.io";
 
@@ -65,7 +65,7 @@ export async function sendOneGpsPing(reason: string): Promise<boolean> {
           activeDtcCount: iosix?.activeDtcCount ?? null,
           activeDtcCodes: iosix?.activeDtcCodes ?? null,
           eldConnected: iosix?.connected ?? false,
-          eldMac: iosix?.connected ? IOSIX_MAC : null,
+          eldMac: iosix?.connected ? getEldMac() : null,
           eldPacketCycleComplete: iosix?.packetCycleComplete ?? false,
         }),
       },

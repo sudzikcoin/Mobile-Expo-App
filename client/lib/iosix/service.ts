@@ -5,7 +5,34 @@ import { IOSiXData, emptyIOSiXData } from "./types";
 import { IOSiXCycleBuffer } from "./parser";
 import { setSnapshot } from "./store";
 
-export const IOSIX_MAC = "E0:E2:E6:18:ED:B2";
+// The ELD MAC is no longer the arrival mechanism (native GPS geofences are —
+// see transistorsoftTracking.syncStopGeofences). BLE ELD is now a supplementary
+// telemetry source only. The target MAC is configurable via AsyncStorage so the
+// app is not welded to a single physical truck; the historical hardcoded value
+// stays as the default so existing single-truck installs keep working.
+export const DEFAULT_IOSIX_MAC = "E0:E2:E6:18:ED:B2";
+const ELD_MAC_KEY = "@pingpoint_truck_eld_mac";
+let configuredEldMac = DEFAULT_IOSIX_MAC;
+
+export function getEldMac(): string {
+  return configuredEldMac;
+}
+
+export async function setEldMac(mac: string): Promise<void> {
+  const clean = mac.trim().toUpperCase();
+  configuredEldMac = clean;
+  try {
+    await AsyncStorage.setItem(ELD_MAC_KEY, clean);
+  } catch {}
+}
+
+async function loadEldMac(): Promise<void> {
+  try {
+    const stored = await AsyncStorage.getItem(ELD_MAC_KEY);
+    if (stored && stored.trim()) configuredEldMac = stored.trim().toUpperCase();
+  } catch {}
+}
+
 export const IOSIX_SERVICE_UUID = "00000001-0000-1000-8000-00805f9b34fb";
 export const IOSIX_CHAR_UUID = "00000001-0000-1000-8000-00805f9b34fb";
 export const RECONNECT_INTERVAL_MS = 5000;
@@ -144,6 +171,7 @@ class IOSiXService {
     if (this.started) return;
     this.started = true;
 
+    await loadEldMac();
     await this.loadRawLogFromStorage();
     this.startRawLogTimers();
     this.appStateSub = AppState.addEventListener("change", this.handleAppStateChange);
@@ -231,7 +259,7 @@ class IOSiXService {
       }
       if (!scanned) return;
       const id = (scanned.id || "").toUpperCase();
-      if (id !== IOSIX_MAC.toUpperCase()) return;
+      if (id !== getEldMac().toUpperCase()) return;
       try {
         this.manager?.stopDeviceScan();
       } catch {}

@@ -1,7 +1,7 @@
 import { getApiUrl } from "@/lib/query-client";
 import { Load, Stop, LoadStatus, StopStatus, StopType } from "./types";
 import { IOSiXData } from "./iosix/types";
-import { IOSIX_MAC } from "./iosix/service";
+import { getEldMac } from "./iosix/service";
 
 const PRODUCTION_API_BASE = "https://pingpoint.suverse.io";
 
@@ -22,6 +22,7 @@ interface APIStop {
   fullAddress?: string;
   lat?: string | number | null;
   lng?: string | number | null;
+  geofenceRadiusM?: number | string | null;
   windowFrom: string;
   windowTo: string | null;
   status: "PLANNED" | "ARRIVED" | "DEPARTED";
@@ -80,7 +81,7 @@ function buildPingBody(payload: PingPayload): Record<string, unknown> {
     activeDtcCount: t?.activeDtcCount ?? null,
     activeDtcCodes: t?.activeDtcCodes ?? null,
     eldConnected: t?.connected ?? false,
-    eldMac: t?.connected ? IOSIX_MAC : null,
+    eldMac: t?.connected ? getEldMac() : null,
     eldPacketCycleComplete: t?.packetCycleComplete ?? false,
   };
 }
@@ -147,6 +148,7 @@ function transformAPIResponse(data: APILoadResponse): { load: Load; balance: num
       fullAddress: stop.fullAddress,
       lat: stop.lat != null ? Number(stop.lat) : null,
       lng: stop.lng != null ? Number(stop.lng) : null,
+      geofenceRadiusM: stop.geofenceRadiusM != null ? Number(stop.geofenceRadiusM) : null,
       scheduledTime: stop.windowFrom,
       arrivedAt: stop.arrivedAt || undefined,
       departedAt: stop.departedAt || undefined,

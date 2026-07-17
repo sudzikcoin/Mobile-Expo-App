@@ -17,6 +17,8 @@ import {
 import {
   initTracking,
   stopTracking,
+  setGeofenceHandler,
+  syncStopGeofences,
 } from "./transistorsoftTracking";
 import {
   fetchDriverLoad,
@@ -80,6 +82,17 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   
   const fcmRefreshUnsubRef = useRef<(() => void) | null>(null);
   const fcmFgUnsubRef = useRef<(() => void) | null>(null);
+
+  // Native geofence callbacks fire from background/terminated state, so they
+  // read current token/load through refs rather than a stale render closure.
+  const tokenRef = useRef<string | null>(null);
+  const loadRef = useRef<Load | null>(null);
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
+  useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
 
   const parseTokenFromUrl = (url: string): string | null => {
     try {
@@ -340,6 +353,50 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       },
     });
   }, [token, load, refreshLoad]);
+
+  // Register the native-geofence arrival/departure handler once. It reads
+  // current token/load via refs because it fires from background/terminated.
+  useEffect(() => {
+    setGeofenceHandler(async (stopId, action) => {
+      const tk = tokenRef.current;
+      const ld = loadRef.current;
+      if (!tk || !ld) return;
+      const stop = ld.stops.find((s) => s.id === stopId);
+      if (!stop) return;
+      try {
+        if (action === "ENTER" && !stop.arrivedAt) {
+          await markStopArrival(tk, stopId);
+          await addLog({ action: "ARRIVE", stopId, stopName: stop.companyName });
+          await refreshLoad();
+        } else if (action === "EXIT" && stop.arrivedAt && !stop.departedAt) {
+          await markStopDeparture(tk, stopId);
+          await addLog({ action: "DEPART", stopId, stopName: stop.companyName });
+          await refreshLoad();
+        }
+      } catch (err) {
+        console.error("[Geofence] arrive/depart failed:", err);
+      }
+    });
+    return () => setGeofenceHandler(null);
+  }, [refreshLoad]);
+
+  // Keep native geofences in sync with the active load's stops. Stops without
+  // coordinates are skipped inside syncStopGeofences (logged there).
+  useEffect(() => {
+    if (!token || !isTruckToken(token)) return;
+    if (!load) {
+      void syncStopGeofences([]);
+      return;
+    }
+    void syncStopGeofences(
+      load.stops.map((s) => ({
+        id: s.id,
+        lat: s.lat,
+        lng: s.lng,
+        radiusM: s.geofenceRadiusM ?? null,
+      })),
+    );
+  }, [token, load]);
 
   useEffect(() => {
     const init = async () => {

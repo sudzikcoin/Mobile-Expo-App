@@ -15,6 +15,9 @@ export interface Stop {
   fullAddress?: string;
   lat?: number | null;
   lng?: number | null;
+  // Per-stop geofence radius in meters (server stops.geofence_radius_m,
+  // default 3200). Used to register native geofences on the device.
+  geofenceRadiusM?: number | null;
   scheduledTime: string;
   arrivedAt?: string;
   departedAt?: string;

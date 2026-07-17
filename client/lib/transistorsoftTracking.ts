@@ -8,6 +8,73 @@ const PINGPOINT_BASE = "https://pingpoint.suverse.io";
 
 let isReady = false;
 
+// Native-geofence arrival/departure dispatch. driver-context registers a
+// handler that marks the stop arrived/departed on the server. The transistorsoft
+// SDK fires onGeofence natively — it wakes the app from background/terminated
+// when the truck crosses a stop boundary, which is the whole point of native
+// geofences (the previous build registered zero geofences, so onGeofence was
+// dead code and arrival was detected only via the BLE-ELD software path).
+type GeofenceAction = "ENTER" | "EXIT" | "DWELL";
+let onStopGeofence: ((stopId: string, action: GeofenceAction) => void) | null = null;
+
+export function setGeofenceHandler(
+  cb: ((stopId: string, action: GeofenceAction) => void) | null,
+): void {
+  onStopGeofence = cb;
+}
+
+export interface GeofenceStop {
+  id: string;
+  lat: number | null | undefined;
+  lng: number | null | undefined;
+  radiusM?: number | null;
+}
+
+// Transistorsoft ignores geofences below a small radius; clamp up so a tight
+// server value can't silently drop the zone. Matches the server's 2-mile
+// default when no per-stop radius is supplied.
+const MIN_GEOFENCE_RADIUS_M = 200;
+const DEFAULT_GEOFENCE_RADIUS_M = 3200;
+
+// Replace the full geofence set with the current load's stops. Stops without
+// coordinates are logged and skipped (after the server-side geocoding fix these
+// should be rare). Registered geofences persist in native storage across app
+// restarts, so re-syncing on every load change keeps them correct.
+export async function syncStopGeofences(stops: GeofenceStop[]): Promise<void> {
+  if (!isReady) return;
+  const valid: GeofenceStop[] = [];
+  for (const s of stops) {
+    if (
+      typeof s.lat === "number" &&
+      typeof s.lng === "number" &&
+      Number.isFinite(s.lat) &&
+      Number.isFinite(s.lng)
+    ) {
+      valid.push(s);
+    } else {
+      console.log(`[Geofence] Stop ${s.id} has no coords — skipping geofence`);
+    }
+  }
+  try {
+    await BackgroundGeolocation.removeGeofences();
+    if (valid.length === 0) return;
+    await BackgroundGeolocation.addGeofences(
+      valid.map((s) => ({
+        identifier: s.id,
+        latitude: s.lat as number,
+        longitude: s.lng as number,
+        radius: Math.max(s.radiusM ?? DEFAULT_GEOFENCE_RADIUS_M, MIN_GEOFENCE_RADIUS_M),
+        notifyOnEntry: true,
+        notifyOnExit: true,
+        notifyOnDwell: false,
+      })),
+    );
+    console.log(`[Geofence] Registered ${valid.length} native geofence(s)`);
+  } catch (err) {
+    console.warn("[Geofence] Failed to sync geofences:", err);
+  }
+}
+
 // Android 13+ (API 33) requires runtime grant for POST_NOTIFICATIONS, even
 // when the permission is in the manifest. Without it the foreground-service
 // notification is suppressed and the OS kills the tracking process within
@@ -130,7 +197,8 @@ export async function initTracking(
     });
 
     // Geofence — pickup/delivery arrival must be on the server within
-    // seconds, not bundled into the next batch flush.
+    // seconds, not bundled into the next batch flush. Capture a fresh fix,
+    // flush the queue, then dispatch to the arrival/departure handler.
     BackgroundGeolocation.onGeofence(async (event) => {
       console.log("[Geofence]", event.action, event.identifier);
       try {
@@ -144,6 +212,13 @@ export async function initTracking(
         await BackgroundGeolocation.sync();
       } catch (err) {
         console.warn("[Geofence] Sync failed:", err);
+      }
+      // Mark arrival/departure regardless of sync outcome — the stop event is
+      // more important than the buffered pings and has its own retry.
+      try {
+        onStopGeofence?.(event.identifier, event.action as GeofenceAction);
+      } catch (err) {
+        console.warn("[Geofence] Handler failed:", err);
       }
     });
 
