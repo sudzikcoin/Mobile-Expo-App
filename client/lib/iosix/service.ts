@@ -36,6 +36,14 @@ async function loadEldMac(): Promise<void> {
 export const IOSIX_SERVICE_UUID = "00000001-0000-1000-8000-00805f9b34fb";
 export const IOSIX_CHAR_UUID = "00000001-0000-1000-8000-00805f9b34fb";
 export const RECONNECT_INTERVAL_MS = 5000;
+// Exponential backoff for scan restarts: 5s, 10s, 20s, ... capped at 5min.
+// A fixed 5s restart of an unfiltered scan trips Android's scan throttle
+// (max 5 starts per 30s) and the resulting fail-loop can stall the UI thread
+// (ANR "PingPoint Driver isn't responding" while the ELD dongle is away).
+const RECONNECT_MAX_MS = 5 * 60_000;
+// Every Nth attempt scans without a UUID filter as a safety net, in case the
+// dongle's advertisement doesn't include IOSIX_SERVICE_UUID.
+const UNFILTERED_SCAN_EVERY = 4;
 const SCAN_TIMEOUT_MS = 20_000;
 
 // Raw packet logger: capture every BLE notification (base64 wire bytes)
@@ -122,6 +130,7 @@ class IOSiXService {
   private disconnectSub: Subscription | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private scanTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
   private buffer = new IOSiXCycleBuffer();
   private state: ServiceSnapshot = {
     status: "idle",
@@ -170,6 +179,7 @@ class IOSiXService {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
+    this.reconnectAttempts = 0;
 
     await loadEldMac();
     await this.loadRawLogFromStorage();
@@ -252,7 +262,14 @@ class IOSiXService {
       }
     }, SCAN_TIMEOUT_MS);
 
-    this.manager.startDeviceScan(null, { allowDuplicates: false }, (error, scanned) => {
+    // Filtered scans are exempt from most of Android's scan throttling and
+    // are far cheaper than a full unfiltered sweep.
+    const uuidFilter =
+      (this.reconnectAttempts + 1) % UNFILTERED_SCAN_EVERY === 0
+        ? null
+        : [IOSIX_SERVICE_UUID];
+
+    this.manager.startDeviceScan(uuidFilter, { allowDuplicates: false }, (error, scanned) => {
       if (error) {
         this.scheduleReconnect(this.errMsg(error));
         return;
@@ -309,6 +326,7 @@ class IOSiXService {
           } catch {}
         }
       );
+      this.reconnectAttempts = 0;
       this.update({ status: "connected", error: null });
     } catch (e) {
       this.scheduleReconnect(this.errMsg(e));
@@ -340,9 +358,14 @@ class IOSiXService {
     this.disconnectSub = null;
     this.device = null;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    const delay = Math.min(
+      RECONNECT_MAX_MS,
+      RECONNECT_INTERVAL_MS * 2 ** this.reconnectAttempts,
+    );
+    this.reconnectAttempts += 1;
     this.reconnectTimer = setTimeout(() => {
       if (this.started) this.startScan();
-    }, RECONNECT_INTERVAL_MS);
+    }, delay);
   }
 
   private errMsg(e: unknown): string {
@@ -415,6 +438,21 @@ class IOSiXService {
         await this.flushRawLogToStorage().catch(() => {});
         await this.uploadRawLog().catch(() => {});
       })();
+    } else if (next === "active") {
+      // Driver is looking at the screen again — restart the search for the
+      // dongle right away instead of waiting out a (possibly minutes-long)
+      // backoff delay.
+      this.reconnectAttempts = 0;
+      if (
+        this.started &&
+        this.manager &&
+        !this.device &&
+        this.reconnectTimer
+      ) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+        this.startScan();
+      }
     }
   };
 
