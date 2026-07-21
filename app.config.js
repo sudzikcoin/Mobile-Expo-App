@@ -31,6 +31,10 @@ module.exports = {
       },
     },
     android: {
+      // Keep in lockstep with `version` (1.6.5 -> 165); EAS autoIncrement used
+      // to own this remotely, but local prebuild emits versionCode 1 without it
+      // and Android then refuses the install as a downgrade.
+      versionCode: 165,
       adaptiveIcon: {
         backgroundColor: "#0a0a1f",
         foregroundImage: "./assets/images/android-icon-foreground.png",
