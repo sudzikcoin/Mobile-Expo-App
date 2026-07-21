@@ -2,7 +2,8 @@ import BackgroundGeolocation, {
   State,
   Location,
 } from "react-native-background-geolocation";
-import { PermissionsAndroid, Platform } from "react-native";
+import { Alert, PermissionsAndroid, Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const PINGPOINT_BASE = "https://pingpoint.suverse.io";
 
@@ -102,6 +103,52 @@ export async function requestNotificationPermission(): Promise<boolean> {
   } catch (err) {
     console.warn("[Permissions] POST_NOTIFICATIONS request failed:", err);
     return false;
+  }
+}
+
+// Doze puts the app in battery-optimized standby during long stationary
+// stretches (overnight parking), deferring the 5-min heartbeat for hours.
+// An exemption keeps the tracking service's alarms firing on schedule.
+// Prompt at most once a week so a driver who declined isn't nagged every
+// launch, and re-check the actual OS state each time (the user can revoke
+// the exemption in settings at any point).
+const BATT_OPT_PROMPT_KEY = "pp_batt_opt_prompted_at";
+const BATT_OPT_REPROMPT_MS = 7 * 24 * 60 * 60 * 1000;
+
+export async function requestBatteryOptimizationExemption(): Promise<void> {
+  if (Platform.OS !== "android") return;
+  try {
+    const isIgnoring =
+      await BackgroundGeolocation.deviceSettings.isIgnoringBatteryOptimizations();
+    if (isIgnoring) return;
+
+    const promptedAt = await AsyncStorage.getItem(BATT_OPT_PROMPT_KEY);
+    if (promptedAt && Date.now() - Number(promptedAt) < BATT_OPT_REPROMPT_MS) {
+      return;
+    }
+    await AsyncStorage.setItem(BATT_OPT_PROMPT_KEY, String(Date.now()));
+
+    const request =
+      await BackgroundGeolocation.deviceSettings.showIgnoreBatteryOptimizations();
+    Alert.alert(
+      "Keep tracking reliable",
+      "Android pauses PingPoint's GPS during long stops to save battery, which delays arrival and departure updates to dispatch. Allow PingPoint to ignore battery optimizations on the next screen.",
+      [
+        { text: "Not now", style: "cancel" },
+        {
+          text: "Open settings",
+          onPress: () => {
+            BackgroundGeolocation.deviceSettings
+              .show(request)
+              .catch((err) =>
+                console.warn("[BattOpt] settings screen failed:", err),
+              );
+          },
+        },
+      ],
+    );
+  } catch (err) {
+    console.warn("[BattOpt] exemption check failed:", err);
   }
 }
 
