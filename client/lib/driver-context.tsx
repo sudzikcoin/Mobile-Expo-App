@@ -19,6 +19,7 @@ import {
   stopTracking,
   setGeofenceHandler,
   syncStopGeofences,
+  requestBatteryOptimizationExemption,
 } from "./transistorsoftTracking";
 import {
   fetchDriverLoad,
@@ -27,6 +28,7 @@ import {
   fetchActiveLoadForTruck,
 } from "./api";
 import { Load } from "./types";
+import { notifyStopEvent } from "./notifications";
 import { getIOSiXService } from "./iosix/service";
 import {
   registerFcmTokenForDriver,
@@ -231,6 +233,10 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     try {
       await withTimeout(initTracking(token, truckId), 15000, "initTracking");
       console.log("[Driver] Transistorsoft tracking started");
+      // Fire-and-forget: shows at most one weekly prompt when the app isn't
+      // exempt from battery optimization (Doze delays heartbeats for hours
+      // on overnight stops without it).
+      void requestBatteryOptimizationExemption();
     } catch (err) {
       console.error("[Driver] startLocationTracking failed:", err);
     }
@@ -381,10 +387,12 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       try {
         if (action === "ENTER" && !stop.arrivedAt) {
           await markStopArrival(tk, stopId);
+          void notifyStopEvent("ENTER", stop.companyName);
           await addLog({ action: "ARRIVE", stopId, stopName: stop.companyName });
           await refreshLoad();
         } else if (action === "EXIT" && stop.arrivedAt && !stop.departedAt) {
           await markStopDeparture(tk, stopId);
+          void notifyStopEvent("EXIT", stop.companyName);
           await addLog({ action: "DEPART", stopId, stopName: stop.companyName });
           await refreshLoad();
         }

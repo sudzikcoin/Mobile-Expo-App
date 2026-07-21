@@ -4,6 +4,7 @@ import BackgroundGeolocation from "react-native-background-geolocation";
 
 import App from "@/App";
 import { handleFcmDataMessage } from "@/lib/fcm";
+import { notifyStopEvent } from "@/lib/notifications";
 
 // Background message handler MUST be registered at module load time —
 // before the React tree mounts — so the headless JS instance Android
@@ -24,6 +25,16 @@ messaging().setBackgroundMessageHandler(async (message) => {
 const backgroundGeolocationHeadlessTask = async (event) => {
   try {
     if (event.name === "geofence" || event.name === "heartbeat") {
+      // In terminated state there's no React tree to surface the crossing —
+      // the local notification is the only feedback the driver gets. Stop
+      // details aren't available here, so the text stays generic; the server
+      // marks the actual arrive/depart from the synced ping stream.
+      if (event.name === "geofence") {
+        const action = event.params?.action;
+        if (action === "ENTER" || action === "EXIT") {
+          void notifyStopEvent(action, null);
+        }
+      }
       await BackgroundGeolocation.getCurrentPosition({
         samples: 1,
         persist: true,

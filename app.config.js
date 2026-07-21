@@ -115,6 +115,7 @@ module.exports = {
       ],
       "./plugins/withMonitoringTool",
       "expo-task-manager",
+      "expo-notifications",
       "./plugins/withBootReceiver",
       "./plugins/withBundleInDebug",
       "./plugins/withNotificationIcon",
