@@ -4,41 +4,42 @@ import { IOSiXData, emptyIOSiXData } from "./types";
 // starting with "Data: ". BLE notify fragments carry a one-byte sequence
 // counter that the service layer strips before feeding this parser.
 //
-// IMPORTANT: this regex must stay in sync with the server-side parser at
-// /root/PingPoint/server/routes.ts (IOSIX_LINE_RE). When fields change in
-// firmware, update both copies together.
+// IMPORTANT: this parser must stay in sync with the server-side parser at
+// /root/PingPoint/server/iosixFrame.ts. When fields change in firmware,
+// update both copies together.
 //
-// Field map (verified against raw BLE captures, logs/iosix 2026-07-21):
-//   m[1]  ignition 0/1 (0 = key off; GPS/voltage remain valid)
-//   m[2]  VIN            m[3]  engine RPM
-//   m[4]  ECU road speed km/h (hard 0 engine-off, governed at 120)
-//   m[5]  odometer km    m[6]  trip km (both → mi)
-//   m[7]  total engine hours (0.05 h quantum)
-//   m[8]  engine-hours since engine start (0.05 h; NOT fuel — the stream
-//         carries no fuel measurement at all)
-//   m[9]  battery V      m[10] date MM/DD/YY    m[11] time HH:MM:SS UTC
-//   m[12] lat            m[13] lng
-//   m[14] GPS ground speed km/h (works engine-off, drifts 0-4 km/h parked,
-//         empty on no fix)      m[15] heading 0-358°   m[16] satellites
-//   m[17] altitude m     m[18] HDOP (was misparsed as fuel rate)
-//   m[19] session counter (~1Hz)                m[20] packet flag (349)
-const IOSIX_LINE_RE =
-  /Data:\s*([01]),([A-Z0-9]{1,32}),(-?\d+),(-?\d+(?:\.\d+)?),([\d.]+),([\d.]+),([\d.]+),([\d.]+),([\d.]+),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(-?\d+\.\d+),(-?\d+\.\d+),(-?\d+),(-?\d+),(-?\d+),(\d+),([\d.]+),(\d+),(\d+)/;
+// Field map proven by the ground-up stream decode of 2026-07-22
+// (field_table.csv, all 20 fields):
+//   f0  engine_running 0/1        f1  VIN
+//   f2  engine RPM (integer)
+//   f3  ECU road speed km/h (hard 0 engine-off, governed at 120)
+//   f4  odometer km (0.005 km quantum)
+//   f5  distance since engine start, km
+//   f6  total engine hours (0.05 h quantum)
+//   f7  engine-hours since engine start (0.05 h; NOT fuel — the stream
+//       carries no fuel measurement at all)
+//   f8  battery voltage (0.01 V)
+//   f9  date MM/DD/YY UTC         f10 time HH:MM:SS UTC
+//   f11 lat / f12 lng (EMPTY STRINGS when no GPS fix — frame still valid!)
+//   f13 GPS ground speed km/h (works engine-off, empty on no fix)
+//   f14 GPS heading 0-359         f15 satellites
+//   f16 GPS altitude m            f17 HDOP
+//   f18 device uptime seconds (uint16, wraps mod 65536)
+//   f19 constant 349 — carries no information, ignored
+//
+// The GPS block f11-f17 goes empty on fix loss (~1.3% of frames) while the
+// ECU half stays valid, so parsing must NOT require lat/lng — the old
+// regex silently dropped those frames.
 
 const KM_TO_MI = 0.621371;
-const VOLTAGE_MAX = 32;
 const REASSEMBLY_BUFFER_MAX = 8192;
 const REASSEMBLY_BUFFER_TRIM = 4096;
 
-function num(s: string | undefined): number | null {
-  if (s === undefined) return null;
+// Empty string means "field absent" (GPS block during fix loss) — never 0.
+function numOr(s: string | undefined, min: number, max: number): number | null {
+  if (s === undefined || s === "") return null;
   const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
-
-function clamp(n: number | null, min: number, max: number): number | null {
-  if (n === null) return null;
-  if (n < min || n > max) return null;
+  if (!Number.isFinite(n) || n < min || n > max) return null;
   return n;
 }
 
@@ -54,64 +55,75 @@ function cleanVin(raw: string | undefined): string | null {
  * doesn't match the documented format. Mirror of the server-side parser.
  */
 export function parseLine(line: string): IOSiXData | null {
-  const m = IOSIX_LINE_RE.exec(line);
-  if (!m) return null;
+  const idx = line.indexOf("Data:");
+  if (idx < 0) return null;
+  const f = line
+    .slice(idx + 5)
+    .trim()
+    .split(",")
+    .map((s) => s.trim());
+  if (f.length !== 20) return null;
+
+  if (f[0] !== "0" && f[0] !== "1") return null;
+  const vin = cleanVin(f[1]);
+  if (!vin) return null;
+  if (!/^\d{2}\/\d{2}\/\d{2}$/.test(f[9]) || !/^\d{2}:\d{2}:\d{2}$/.test(f[10])) {
+    return null;
+  }
 
   const data = emptyIOSiXData();
   data.packetCycleComplete = false;
 
-  data.ignition = m[1] === "1";
-
-  data.vin = cleanVin(m[2]);
-
-  // f2 is a narrow-band integer often correlating with engine RPM at idle.
-  // Server treats it as unreliable; mobile keeps reading it for dashboard
-  // parity until a better source is wired up.
-  data.rpm = clamp(num(m[3]), 0, 4000);
+  data.ignition = f[0] === "1";
+  data.vin = vin;
+  data.rpm = numOr(f[2], 0, 4000);
 
   // f3/f13 were swapped in earlier builds: f3 is the ECU road speed and
   // f13 is the GPS ground speed. Both are stored; speedMph prefers GPS
   // (valid engine-off) and falls back to ECU when there is no fix.
-  data.ecuSpeedKph = clamp(num(m[4]), 0, 200);
-  data.gpsSpeedKph = clamp(num(m[14]), 0, 250);
+  data.ecuSpeedKph = numOr(f[3], 0, 200);
+  data.gpsSpeedKph = numOr(f[13], 0, 250);
   const speedKph = data.gpsSpeedKph ?? data.ecuSpeedKph;
   data.speedMph = speedKph !== null ? Math.round(speedKph * KM_TO_MI * 10) / 10 : null;
 
-  // f4/f5 are kilometers on the wire (verified: sum of f4 deltas matches the
-  // GPS path integral 1:1, not 1:0.62) — convert to the miles the fields and
-  // DB columns are named for.
-  const odoKm = clamp(num(m[5]), 0, 2_000_000);
+  // f4/f5 are kilometers on the wire — converted to the miles the fields
+  // and DB columns are named for.
+  const odoKm = numOr(f[4], 0, 2_000_000);
   data.odometerMiles = odoKm !== null ? Math.round(odoKm * KM_TO_MI * 10) / 10 : null;
-  const tripKm = clamp(num(m[6]), 0, 100_000);
+  const tripKm = numOr(f[5], 0, 100_000);
   data.tripMiles = tripKm !== null ? Math.round(tripKm * KM_TO_MI * 10) / 10 : null;
-  data.engineHours = clamp(num(m[7]), 0, 200_000);
 
+  data.engineHours = numOr(f[6], 0, 200_000);
   // f7 accumulates at exactly 1.000 per engine-hour (idle or driving) and
   // resets on engine start — engine-hours since start, previously misread
   // as cumulative trip fuel.
-  data.engineHoursSinceStart = clamp(num(m[8]), 0, 1000);
+  data.engineHoursSinceStart = numOr(f[7], 0, 1000);
 
-  data.batteryVoltage = clamp(num(m[9]), 0, VOLTAGE_MAX);
+  data.batteryVoltage = numOr(f[8], 0, 32);
 
-  if (m[10] && m[11]) {
-    const [mo, dd, yy] = m[10].split("/");
-    data.gpsTimeUtc = `20${yy}-${mo}-${dd}T${m[11]}Z`;
+  const [mo, dd, yy] = f[9].split("/");
+  data.gpsTimeUtc = `20${yy}-${mo}-${dd}T${f[10]}Z`;
+
+  // GPS block: all-empty means "no fix" — the ECU half is still valid.
+  let lat = numOr(f[11], -90, 90);
+  let lng = numOr(f[12], -180, 180);
+  if (lat === 0 && lng === 0) {
+    lat = null;
+    lng = null;
   }
+  data.lat = lat;
+  data.lng = lng;
+  const hasFix = lat !== null && lng !== null;
 
-  data.lat = clamp(num(m[12]), -90, 90);
-  data.lng = clamp(num(m[13]), -180, 180);
-
-  data.heading = clamp(num(m[15]), 0, 360);
-  // m[16] is the GPS satellite count, not a gear (the 0-10 clamp used to
-  // mask that). The PT30 stream has no transmission data.
-  data.currentGear = null;
-
+  data.heading = hasFix ? numOr(f[14], 0, 360) : null;
+  data.satellites = hasFix ? numOr(f[15], 0, 64) : null;
+  data.altitudeM = hasFix ? numOr(f[16], -500, 10000) : null;
   // f17 is HDOP (GPS dilution of precision), NOT a fuel rate — the old
   // ×10/3.785 formula displayed HDOP as a constant ~2-3 gal/h.
-  data.hdop = clamp(num(m[18]), 0, 50);
+  data.hdop = hasFix ? numOr(f[17], 0, 50) : null;
 
-  data.satellites = clamp(num(m[16]), 0, 32);
-  data.altitudeM = clamp(num(m[17]), -500, 10000);
+  // f15 is the GPS satellite count; the PT30 stream has no transmission data.
+  data.currentGear = null;
   // gpsAccuracy: not in the PT30 stream (Expo location supplies accuracy).
   data.gpsAccuracy = null;
 
