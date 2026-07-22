@@ -8,6 +8,7 @@ export interface IOSiXData {
   fuelTempC: number | null;
   fuelPressureKpa: number | null;
   fuelRateGph: number | null;
+  hdop: number | null;
   totalFuelUsedGal: number | null;
   engineHours: number | null;
   turboTempC: number | null;
@@ -64,6 +65,7 @@ export function emptyIOSiXData(): IOSiXData {
     fuelTempC: null,
     fuelPressureKpa: null,
     fuelRateGph: null,
+    hdop: null,
     totalFuelUsedGal: null,
     engineHours: null,
     turboTempC: null,

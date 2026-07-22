@@ -213,7 +213,7 @@ export default function DashboardScreen() {
                   {iosix.connected
                     ? iosix.telemetry.ignition === false
                       ? `ELD · Engine Off${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}`
-                      : `ELD${iosix.telemetry.rpm !== null ? ` · ${Math.round(iosix.telemetry.rpm)} RPM` : ""}${iosix.telemetry.fuelRateGph !== null ? ` · ${iosix.telemetry.fuelRateGph.toFixed(1)} gal/h` : ""}${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}`
+                      : `ELD${iosix.telemetry.rpm !== null ? ` · ${Math.round(iosix.telemetry.rpm)} RPM` : ""}${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}`
                     : iosix.scanning
                     ? "Scanning for ELD..."
                     : iosix.error === "ble_permission_denied"

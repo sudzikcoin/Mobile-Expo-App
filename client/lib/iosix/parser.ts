@@ -16,16 +16,12 @@ import { IOSiXData, emptyIOSiXData } from "./types";
 //   m[9]  battery V      m[10] date MM/DD/YY    m[11] time HH:MM:SS UTC
 //   m[12] lat            m[13] lng
 //   m[14] wheel speed kph   m[15] heading 0-358°   m[16] satellites
-//   m[17] altitude m     m[18] HDOP
+//   m[17] altitude m     m[18] HDOP (was misparsed as fuel rate)
 //   m[19] session counter (~1Hz)                m[20] packet flag (349)
 const IOSIX_LINE_RE =
   /Data:\s*([01]),([A-Z0-9]{1,32}),(-?\d+),(-?\d+(?:\.\d+)?),([\d.]+),([\d.]+),([\d.]+),([\d.]+),([\d.]+),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(-?\d+\.\d+),(-?\d+\.\d+),(-?\d+),(-?\d+),(-?\d+),(\d+),([\d.]+),(\d+),(\d+)/;
 
 const KPH_TO_MPH = 0.621371;
-const F17_SENTINEL_NO_DATA = 90;
-const F17_LPH_PER_TENTH = 10;
-const LITERS_PER_GALLON = 3.785;
-const FUEL_RATE_MAX_GPH = 12;
 const VOLTAGE_MAX = 32;
 const REASSEMBLY_BUFFER_MAX = 8192;
 const REASSEMBLY_BUFFER_TRIM = 4096;
@@ -95,20 +91,14 @@ export function parseLine(line: string): IOSiXData | null {
   data.heading = clamp(num(m[15]), 0, 360);
   data.currentGear = clamp(num(m[16]), 0, 10);
 
-  // f17: instantaneous fuel rate in L/h × 0.1. Apply documented formula
-  // (gph = f17 × 10 / 3.785) with sentinel filtering and physical clamp.
-  const f17 = num(m[18]);
-  let fuelRateGph: number | null = null;
-  if (f17 !== null && f17 < F17_SENTINEL_NO_DATA) {
-    const gph = (f17 * F17_LPH_PER_TENTH) / LITERS_PER_GALLON;
-    if (gph >= 0 && gph <= FUEL_RATE_MAX_GPH) {
-      fuelRateGph = Math.round(gph * 100) / 100;
-    }
-  }
-  data.fuelRateGph = fuelRateGph;
+  // f17 is HDOP (GPS dilution of precision), NOT a fuel rate — the old
+  // ×10/3.785 formula displayed HDOP as a constant ~2-3 gal/h. The PT30 BLE
+  // stream carries no instantaneous fuel rate; fuelRateGph stays null until
+  // a real source exists.
+  data.hdop = clamp(num(m[18]), 0, 50);
+  data.fuelRateGph = null;
 
-  // satellites / gpsAccuracy / altitude: not present in PT30 BLE stream.
-  // Expo location subscription supplies accuracy separately.
+  // gpsAccuracy: not in the PT30 stream (Expo location supplies accuracy).
   data.satellites = null;
   data.gpsAccuracy = null;
   data.altitudeM = null;

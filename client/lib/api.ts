@@ -70,6 +70,7 @@ function buildPingBody(payload: PingPayload): Record<string, unknown> {
     coolantTempC: t?.coolantTempC ?? null,
     oilPressureKpa: t?.oilPressureKpa ?? null,
     fuelRateGph: t?.fuelRateGph ?? null,
+    hdop: t?.hdop ?? null,
     totalFuelUsedGal: t?.totalFuelUsedGal ?? null,
     engineHours: t?.engineHours ?? null,
     throttlePct: t?.throttlePct ?? null,
@@ -339,7 +340,7 @@ export async function sendLocationPing(
 
       if (response.ok) {
         const iosixInfo = payload.iosix?.connected
-          ? ` iosix=ok rpm=${payload.iosix.rpm ?? "-"} fuel=${payload.iosix.fuelRateGph ?? "-"}gph`
+          ? ` iosix=ok rpm=${payload.iosix.rpm ?? "-"} hdop=${payload.iosix.hdop ?? "-"}`
           : "";
         console.log(`[GPS] Ping sent successfully: ${payload.lat}, ${payload.lng}${iosixInfo}`);
         return true;
