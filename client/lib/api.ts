@@ -64,6 +64,7 @@ function buildPingBody(payload: PingPayload): Record<string, unknown> {
     speed: payload.speed,
     // Prefer IOSiX GPS heading when available, else phone heading.
     heading: t?.heading ?? payload.heading,
+    ignition: t?.ignition ?? null,
     rpm: t?.rpm ?? null,
     engineLoadPct: t?.engineLoadPct ?? null,
     coolantTempC: t?.coolantTempC ?? null,

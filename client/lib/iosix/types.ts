@@ -1,4 +1,5 @@
 export interface IOSiXData {
+  ignition: boolean | null;
   rpm: number | null;
   engineLoadPct: number | null;
   coolantTempC: number | null;
@@ -54,6 +55,7 @@ export interface IOSiXData {
 
 export function emptyIOSiXData(): IOSiXData {
   return {
+    ignition: null,
     rpm: null,
     engineLoadPct: null,
     coolantTempC: null,
