@@ -25,7 +25,8 @@ export interface IOSiXData {
   batteryVoltage: number | null;
   alternatorCurrent: number | null;
 
-  odometerMiles: number | null;
+  // f4/f5 in kilometres — the ELD's native unit (5 m quantum).
+  odometerKm: number | null;
   // f3: ECU road speed (hard 0 with engine off, governed at 120 km/h).
   ecuSpeedKph: number | null;
   // f13: GPS ground speed (works engine-off, drifts 0-4 km/h parked,
@@ -33,7 +34,7 @@ export interface IOSiXData {
   gpsSpeedKph: number | null;
   // Convenience for UI/auto-arrive-depart: GPS speed, ECU fallback, in mph.
   speedMph: number | null;
-  tripMiles: number | null;
+  tripKm: number | null;
 
   dpfSootLoadPct: number | null;
   dpfTempC: number | null;
@@ -88,11 +89,11 @@ export function emptyIOSiXData(): IOSiXData {
     transTempC: null,
     batteryVoltage: null,
     alternatorCurrent: null,
-    odometerMiles: null,
+    odometerKm: null,
     ecuSpeedKph: null,
     gpsSpeedKph: null,
     speedMph: null,
-    tripMiles: null,
+    tripKm: null,
     dpfSootLoadPct: null,
     dpfTempC: null,
     defLevelPct: null,

@@ -77,12 +77,12 @@ function buildPingBody(payload: PingPayload): Record<string, unknown> {
     throttlePct: t?.throttlePct ?? null,
     batteryVoltage: t?.batteryVoltage ?? null,
     ecuSpeedKph: t?.ecuSpeedKph ?? null,
-    odometerMiles: t?.odometerMiles ?? null,
-    tripMiles: t?.tripMiles ?? null,
-    // Version marker: this build converts the ELD's km odometer/trip to
-    // miles client-side. Absent on pre-1.6.6 APKs, which sent raw km —
-    // the server converts those on ingest.
-    odometerUnit: "mi",
+    odometerKm: t?.odometerKm ?? null,
+    tripKm: t?.tripKm ?? null,
+    // Version marker: distances are km end-to-end since 1.6.6. Pre-1.6.6
+    // APKs sent raw km under the legacy *Miles field names with no unit;
+    // the server treats those as km too.
+    odometerUnit: "km",
     currentGear: t?.currentGear ?? null,
     dpfSootLoadPct: t?.dpfSootLoadPct ?? null,
     defLevelPct: t?.defLevelPct ?? null,

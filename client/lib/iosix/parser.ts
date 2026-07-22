@@ -89,12 +89,9 @@ export function parseLine(line: string): IOSiXData | null {
   const speedKph = data.gpsSpeedKph ?? data.ecuSpeedKph;
   data.speedMph = speedKph !== null ? Math.round(speedKph * KM_TO_MI * 10) / 10 : null;
 
-  // f4/f5 are kilometers on the wire — converted to the miles the fields
-  // and DB columns are named for.
-  const odoKm = numOr(f[4], 0, 2_000_000);
-  data.odometerMiles = odoKm !== null ? Math.round(odoKm * KM_TO_MI * 10) / 10 : null;
-  const tripKm = numOr(f[5], 0, 100_000);
-  data.tripMiles = tripKm !== null ? Math.round(tripKm * KM_TO_MI * 10) / 10 : null;
+  // f4/f5 stay in kilometres — the ELD's native unit (5 m quantum).
+  data.odometerKm = numOr(f[4], 0, 2_000_000);
+  data.tripKm = numOr(f[5], 0, 100_000);
 
   data.engineHours = numOr(f[6], 0, 200_000);
   // f7 accumulates at exactly 1.000 per engine-hour (idle or driving) and
