@@ -12,7 +12,9 @@ import { IOSiXData, emptyIOSiXData } from "./types";
 //   m[1]  ignition 0/1 (0 = key off; GPS/voltage remain valid)
 //   m[2]  VIN            m[3]  engine RPM
 //   m[4]  GPS speed kph  m[5]  odometer km      m[6]  trip km (both → mi)
-//   m[7]  engine hours   m[8]  trip fuel (gallons, monotonic per trip)
+//   m[7]  total engine hours (0.05 h quantum)
+//   m[8]  engine-hours since engine start (0.05 h; NOT fuel — the stream
+//         carries no fuel measurement at all)
 //   m[9]  battery V      m[10] date MM/DD/YY    m[11] time HH:MM:SS UTC
 //   m[12] lat            m[13] lng
 //   m[14] wheel speed kph   m[15] heading 0-358°   m[16] satellites
@@ -77,10 +79,10 @@ export function parseLine(line: string): IOSiXData | null {
   data.tripMiles = tripKm !== null ? Math.round(tripKm * KM_TO_MI * 10) / 10 : null;
   data.engineHours = clamp(num(m[7]), 0, 200_000);
 
-  // f7 is cumulative trip fuel in gallons (monotonic counter), NOT the
-  // instantaneous rate. Storing it as totalFuelUsedGal lines mobile up with
-  // the server's tracking_pings.total_fuel_gal column and the BLE protocol.
-  data.totalFuelUsedGal = clamp(num(m[8]), 0, 100_000);
+  // f7 accumulates at exactly 1.000 per engine-hour (idle or driving) and
+  // resets on engine start — engine-hours since start, previously misread
+  // as cumulative trip fuel.
+  data.engineHoursSinceStart = clamp(num(m[8]), 0, 1000);
 
   data.batteryVoltage = clamp(num(m[9]), 0, VOLTAGE_MAX);
 
@@ -99,11 +101,8 @@ export function parseLine(line: string): IOSiXData | null {
   data.currentGear = null;
 
   // f17 is HDOP (GPS dilution of precision), NOT a fuel rate — the old
-  // ×10/3.785 formula displayed HDOP as a constant ~2-3 gal/h. The PT30 BLE
-  // stream carries no instantaneous fuel rate; fuelRateGph stays null until
-  // a real source exists.
+  // ×10/3.785 formula displayed HDOP as a constant ~2-3 gal/h.
   data.hdop = clamp(num(m[18]), 0, 50);
-  data.fuelRateGph = null;
 
   data.satellites = clamp(num(m[16]), 0, 32);
   data.altitudeM = clamp(num(m[17]), -500, 10000);

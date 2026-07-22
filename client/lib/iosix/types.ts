@@ -7,10 +7,11 @@ export interface IOSiXData {
   oilPressureKpa: number | null;
   fuelTempC: number | null;
   fuelPressureKpa: number | null;
-  fuelRateGph: number | null;
   hdop: number | null;
-  totalFuelUsedGal: number | null;
   engineHours: number | null;
+  // f7: engine-hours since engine start (0.05 h quantum). The PT30 stream
+  // has NO fuel measurement — this field was previously misread as trip fuel.
+  engineHoursSinceStart: number | null;
   turboTempC: number | null;
   boostPressureKpa: number | null;
   throttlePct: number | null;
@@ -64,10 +65,9 @@ export function emptyIOSiXData(): IOSiXData {
     oilPressureKpa: null,
     fuelTempC: null,
     fuelPressureKpa: null,
-    fuelRateGph: null,
     hdop: null,
-    totalFuelUsedGal: null,
     engineHours: null,
+    engineHoursSinceStart: null,
     turboTempC: null,
     boostPressureKpa: null,
     throttlePct: null,
