@@ -46,14 +46,29 @@ const RECONNECT_MAX_MS = 5 * 60_000;
 const UNFILTERED_SCAN_EVERY = 4;
 const SCAN_TIMEOUT_MS = 20_000;
 
-// Raw packet logger: capture every BLE notification (base64 wire bytes)
-// to AsyncStorage so we can upload for offline diagnostics. Ring-buffered
-// at RAW_LOG_MAX entries; flushed on a timer (in-memory → AsyncStorage)
-// and uploaded every RAW_LOG_UPLOAD_MS and whenever app backgrounds.
+// Raw packet logger: capture every BLE notification (base64 wire bytes) and
+// stream them to the server continuously so the live telemetry view reflects
+// what the truck is sending right now. Behaviour:
+//   - buffered in memory and persisted to AsyncStorage (crash safety),
+//   - uploaded in small batches every RAW_LOG_UPLOAD_MS while connected,
+//   - on upload failure (no signal) the buffer is retained and drains on the
+//     next successful tick — i.e. it doubles as an offline queue up to
+//     RAW_LOG_MAX entries (~2h at 1 Hz).
+// Previously this uploaded only every 2h into a 2000-entry ring, so the server
+// (and the /app/telemetry view) saw fresh data at most a couple times an hour
+// and lost most samples to ring-trim. Now it streams every few seconds.
 const RAW_LOG_KEY = "pp_iosix_raw_log";
-const RAW_LOG_MAX = 2000;
+// Offline queue depth: ~2h of 1 Hz samples. Only reached when uploads fail;
+// under normal streaming the buffer drains every tick and stays near-empty.
+const RAW_LOG_MAX = 7200;
 const RAW_LOG_FLUSH_MS = 30_000;
-const RAW_LOG_UPLOAD_MS = 2 * 60 * 60 * 1000;
+// Continuous streaming cadence. Small batches keep the live view current and
+// payloads bounded (see RAW_LOG_UPLOAD_BATCH).
+const RAW_LOG_UPLOAD_MS = 5_000;
+// Cap entries per POST so a drained offline backlog goes up in bounded chunks
+// (oldest first) instead of one huge request. At 5 s ticks this drains a
+// backlog far faster than 1 Hz fills it.
+const RAW_LOG_UPLOAD_BATCH = 500;
 const RAW_LOG_API_BASE = "https://pingpoint.suverse.io";
 
 interface RawLogEntry { timestamp: number; raw: string; }
@@ -462,7 +477,10 @@ class IOSiXService {
     // Snapshot buffer + persisted merge: we prefer uploading what's in memory
     // since it's the latest; on success we clear both.
     await this.flushRawLogToStorage().catch(() => {});
-    const snapshot = this.rawLogBuffer.slice();
+    // Oldest-first, bounded batch. Any remainder drains on the next tick, so a
+    // reconnect after an offline spell catches up over a few seconds without a
+    // single oversized POST.
+    const snapshot = this.rawLogBuffer.slice(0, RAW_LOG_UPLOAD_BATCH);
     if (snapshot.length === 0) return true;
     try {
       const res = await fetch(`${RAW_LOG_API_BASE}/api/driver/${token}/iosix-raw-log`, {
