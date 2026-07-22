@@ -1,6 +1,7 @@
 import { Platform, PermissionsAndroid, AppState, AppStateStatus, NativeEventSubscription } from "react-native";
 import { BleManager, Device, Subscription, State } from "react-native-ble-plx";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 import { IOSiXData, emptyIOSiXData } from "./types";
 import { IOSiXCycleBuffer } from "./parser";
 import { setSnapshot } from "./store";
@@ -69,7 +70,15 @@ const RAW_LOG_UPLOAD_MS = 5_000;
 // (oldest first) instead of one huge request. At 5 s ticks this drains a
 // backlog far faster than 1 Hz fills it.
 const RAW_LOG_UPLOAD_BATCH = 500;
+// Abort a stuck POST so the in-flight guard can't wedge the stream: okhttp
+// will happily hold a socket open for minutes in a dead-LTE spot, and every
+// tick skipped behind it is telemetry the server never sees.
+const RAW_LOG_UPLOAD_TIMEOUT_MS = 20_000;
 const RAW_LOG_API_BASE = "https://pingpoint.suverse.io";
+// Sent with every raw-log POST so the server can tell which build is talking.
+// The July 2026 stall was misdiagnosed for hours because a fixed APK existed
+// but the truck was still running the previous one — invisible server-side.
+const APP_VERSION: string | null = Constants.expoConfig?.version ?? null;
 
 interface RawLogEntry { timestamp: number; raw: string; }
 
@@ -161,6 +170,7 @@ class IOSiXService {
   private rawLogDirty = false;
   private rawLogFlushTimer: ReturnType<typeof setInterval> | null = null;
   private rawLogUploadTimer: ReturnType<typeof setInterval> | null = null;
+  private rawLogUploadInFlight = false;
   private rawLogToken: string | null = null;
   private appStateSub: NativeEventSubscription | null = null;
 
@@ -474,19 +484,28 @@ class IOSiXService {
   async uploadRawLog(): Promise<boolean> {
     const token = this.rawLogToken;
     if (!token) return false;
-    // Snapshot buffer + persisted merge: we prefer uploading what's in memory
-    // since it's the latest; on success we clear both.
-    await this.flushRawLogToStorage().catch(() => {});
-    // Oldest-first, bounded batch. Any remainder drains on the next tick, so a
-    // reconnect after an offline spell catches up over a few seconds without a
-    // single oversized POST.
-    const snapshot = this.rawLogBuffer.slice(0, RAW_LOG_UPLOAD_BATCH);
-    if (snapshot.length === 0) return true;
+    // One POST at a time. On a slow cell link a request can outlive the 5s
+    // tick; two overlapping uploads would each snapshot the same head of the
+    // buffer and each slice a batch off on success — the server gets one
+    // batch twice and a batch of unsent entries is silently dropped.
+    if (this.rawLogUploadInFlight) return false;
+    this.rawLogUploadInFlight = true;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), RAW_LOG_UPLOAD_TIMEOUT_MS);
     try {
+      // Snapshot buffer + persisted merge: we prefer uploading what's in memory
+      // since it's the latest; on success we clear both.
+      await this.flushRawLogToStorage().catch(() => {});
+      // Oldest-first, bounded batch. Any remainder drains on the next tick, so a
+      // reconnect after an offline spell catches up over a few seconds without a
+      // single oversized POST.
+      const snapshot = this.rawLogBuffer.slice(0, RAW_LOG_UPLOAD_BATCH);
+      if (snapshot.length === 0) return true;
       const res = await fetch(`${RAW_LOG_API_BASE}/api/driver/${token}/iosix-raw-log`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ entries: snapshot }),
+        body: JSON.stringify({ entries: snapshot, appVersion: APP_VERSION }),
+        signal: controller.signal,
       });
       if (!res.ok) return false;
       // Only clear entries we actually sent — new packets may have arrived.
@@ -497,6 +516,9 @@ class IOSiXService {
       return true;
     } catch {
       return false;
+    } finally {
+      clearTimeout(timeoutId);
+      this.rawLogUploadInFlight = false;
     }
   }
 
