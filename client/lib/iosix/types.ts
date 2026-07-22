@@ -26,6 +26,12 @@ export interface IOSiXData {
   alternatorCurrent: number | null;
 
   odometerMiles: number | null;
+  // f3: ECU road speed (hard 0 with engine off, governed at 120 km/h).
+  ecuSpeedKph: number | null;
+  // f13: GPS ground speed (works engine-off, drifts 0-4 km/h parked,
+  // null when there is no GPS fix).
+  gpsSpeedKph: number | null;
+  // Convenience for UI/auto-arrive-depart: GPS speed, ECU fallback, in mph.
   speedMph: number | null;
   tripMiles: number | null;
 
@@ -79,6 +85,8 @@ export function emptyIOSiXData(): IOSiXData {
     batteryVoltage: null,
     alternatorCurrent: null,
     odometerMiles: null,
+    ecuSpeedKph: null,
+    gpsSpeedKph: null,
     speedMph: null,
     tripMiles: null,
     dpfSootLoadPct: null,

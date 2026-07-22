@@ -11,13 +11,15 @@ import { IOSiXData, emptyIOSiXData } from "./types";
 // Field map (verified against raw BLE captures, logs/iosix 2026-07-21):
 //   m[1]  ignition 0/1 (0 = key off; GPS/voltage remain valid)
 //   m[2]  VIN            m[3]  engine RPM
-//   m[4]  GPS speed kph  m[5]  odometer km      m[6]  trip km (both → mi)
+//   m[4]  ECU road speed km/h (hard 0 engine-off, governed at 120)
+//   m[5]  odometer km    m[6]  trip km (both → mi)
 //   m[7]  total engine hours (0.05 h quantum)
 //   m[8]  engine-hours since engine start (0.05 h; NOT fuel — the stream
 //         carries no fuel measurement at all)
 //   m[9]  battery V      m[10] date MM/DD/YY    m[11] time HH:MM:SS UTC
 //   m[12] lat            m[13] lng
-//   m[14] wheel speed kph   m[15] heading 0-358°   m[16] satellites
+//   m[14] GPS ground speed km/h (works engine-off, drifts 0-4 km/h parked,
+//         empty on no fix)      m[15] heading 0-358°   m[16] satellites
 //   m[17] altitude m     m[18] HDOP (was misparsed as fuel rate)
 //   m[19] session counter (~1Hz)                m[20] packet flag (349)
 const IOSIX_LINE_RE =
@@ -67,8 +69,13 @@ export function parseLine(line: string): IOSiXData | null {
   // parity until a better source is wired up.
   data.rpm = clamp(num(m[3]), 0, 4000);
 
-  const kph = num(m[4]);
-  data.speedMph = kph !== null ? Math.round(kph * KM_TO_MI * 10) / 10 : null;
+  // f3/f13 were swapped in earlier builds: f3 is the ECU road speed and
+  // f13 is the GPS ground speed. Both are stored; speedMph prefers GPS
+  // (valid engine-off) and falls back to ECU when there is no fix.
+  data.ecuSpeedKph = clamp(num(m[4]), 0, 200);
+  data.gpsSpeedKph = clamp(num(m[14]), 0, 250);
+  const speedKph = data.gpsSpeedKph ?? data.ecuSpeedKph;
+  data.speedMph = speedKph !== null ? Math.round(speedKph * KM_TO_MI * 10) / 10 : null;
 
   // f4/f5 are kilometers on the wire (verified: sum of f4 deltas matches the
   // GPS path integral 1:1, not 1:0.62) — convert to the miles the fields and
@@ -94,7 +101,6 @@ export function parseLine(line: string): IOSiXData | null {
   data.lat = clamp(num(m[12]), -90, 90);
   data.lng = clamp(num(m[13]), -180, 180);
 
-  // m[14] wheel speed kph: not surfaced — UI uses GPS speed (m[4]).
   data.heading = clamp(num(m[15]), 0, 360);
   // m[16] is the GPS satellite count, not a gear (the 0-10 clamp used to
   // mask that). The PT30 stream has no transmission data.

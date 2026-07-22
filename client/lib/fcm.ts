@@ -56,6 +56,7 @@ export async function sendOneGpsPing(reason: string): Promise<boolean> {
           engineHoursSinceStart: iosix?.engineHoursSinceStart ?? null,
           throttlePct: iosix?.throttlePct ?? null,
           batteryVoltage: iosix?.batteryVoltage ?? null,
+          ecuSpeedKph: iosix?.ecuSpeedKph ?? null,
           odometerMiles: iosix?.odometerMiles ?? null,
           tripMiles: iosix?.tripMiles ?? null,
           currentGear: iosix?.currentGear ?? null,

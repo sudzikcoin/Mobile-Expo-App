@@ -76,6 +76,7 @@ function buildPingBody(payload: PingPayload): Record<string, unknown> {
     engineHoursSinceStart: t?.engineHoursSinceStart ?? null,
     throttlePct: t?.throttlePct ?? null,
     batteryVoltage: t?.batteryVoltage ?? null,
+    ecuSpeedKph: t?.ecuSpeedKph ?? null,
     odometerMiles: t?.odometerMiles ?? null,
     tripMiles: t?.tripMiles ?? null,
     // Version marker: this build converts the ELD's km odometer/trip to
