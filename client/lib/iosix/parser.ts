@@ -1,4 +1,5 @@
 import { IOSiXData, emptyIOSiXData } from "./types";
+import { kphToMph } from "../units";
 
 // IOSiX PT30 BLE wire format: a CRLF-terminated CSV line of 20 fields
 // starting with "Data: ". BLE notify fragments carry a one-byte sequence
@@ -31,7 +32,6 @@ import { IOSiXData, emptyIOSiXData } from "./types";
 // ECU half stays valid, so parsing must NOT require lat/lng — the old
 // regex silently dropped those frames.
 
-const KM_TO_MI = 0.621371;
 const REASSEMBLY_BUFFER_MAX = 8192;
 const REASSEMBLY_BUFFER_TRIM = 4096;
 
@@ -87,7 +87,7 @@ export function parseLine(line: string): IOSiXData | null {
   data.ecuSpeedKph = numOr(f[3], 0, 200);
   data.gpsSpeedKph = numOr(f[13], 0, 250);
   const speedKph = data.gpsSpeedKph ?? data.ecuSpeedKph;
-  data.speedMph = speedKph !== null ? Math.round(speedKph * KM_TO_MI * 10) / 10 : null;
+  data.speedMph = speedKph !== null ? Math.round(kphToMph(speedKph) * 10) / 10 : null;
 
   // f4/f5 stay in kilometres — the ELD's native unit (5 m quantum).
   data.odometerKm = numOr(f[4], 0, 2_000_000);
