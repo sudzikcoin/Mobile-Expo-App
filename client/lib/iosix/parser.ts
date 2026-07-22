@@ -125,6 +125,10 @@ export function parseLine(line: string): IOSiXData | null {
   // ×10/3.785 formula displayed HDOP as a constant ~2-3 gal/h.
   data.hdop = hasFix ? numOr(f[17], 0, 50) : null;
 
+  // f18: device uptime seconds (uint16 wrap). f19 is a constant 349 —
+  // carries no information and is never stored.
+  data.deviceUptimeS = numOr(f[18], 0, 65535);
+
   // f15 is the GPS satellite count; the PT30 stream has no transmission data.
   data.currentGear = null;
   // gpsAccuracy: not in the PT30 stream (Expo location supplies accuracy).

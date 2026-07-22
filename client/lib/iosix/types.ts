@@ -51,6 +51,10 @@ export interface IOSiXData {
   vin: string | null;
   engineSerial: string | null;
 
+  // f18: device uptime seconds, uint16 (wraps mod 65536; keeps counting
+  // through key-off). Server uses (date,time,f18) as the frame dedup key.
+  deviceUptimeS: number | null;
+
   activeDtcCount: number | null;
   activeDtcCodes: string[] | null;
   historicDtcCodes: string[] | null;
@@ -102,6 +106,7 @@ export function emptyIOSiXData(): IOSiXData {
     gpsTimeUtc: null,
     vin: null,
     engineSerial: null,
+    deviceUptimeS: null,
     activeDtcCount: null,
     activeDtcCodes: null,
     historicDtcCodes: null,
