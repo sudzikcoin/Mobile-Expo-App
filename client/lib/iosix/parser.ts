@@ -67,6 +67,9 @@ export function parseLine(line: string): IOSiXData | null {
   if (f[0] !== "0" && f[0] !== "1") return null;
   const vin = cleanVin(f[1]);
   if (!vin) return null;
+  // Device placeholder frames (observed 3 in 41k): RPM sentinel 99999 or
+  // odometer stuck at exactly 5700.000 km. No real reading — drop whole frame.
+  if (Number(f[2]) === 99999 || Number(f[4]) === 5700) return null;
   if (!/^\d{2}\/\d{2}\/\d{2}$/.test(f[9]) || !/^\d{2}:\d{2}:\d{2}$/.test(f[10])) {
     return null;
   }
