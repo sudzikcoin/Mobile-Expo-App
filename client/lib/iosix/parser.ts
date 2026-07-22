@@ -100,10 +100,10 @@ export function parseLine(line: string): IOSiXData | null {
   data.hdop = clamp(num(m[18]), 0, 50);
   data.fuelRateGph = null;
 
+  data.satellites = clamp(num(m[16]), 0, 32);
+  data.altitudeM = clamp(num(m[17]), -500, 10000);
   // gpsAccuracy: not in the PT30 stream (Expo location supplies accuracy).
-  data.satellites = null;
   data.gpsAccuracy = null;
-  data.altitudeM = null;
 
   data.packetCycleComplete = true;
   data.lastUpdated = Date.now();

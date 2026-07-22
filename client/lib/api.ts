@@ -71,6 +71,8 @@ function buildPingBody(payload: PingPayload): Record<string, unknown> {
     oilPressureKpa: t?.oilPressureKpa ?? null,
     fuelRateGph: t?.fuelRateGph ?? null,
     hdop: t?.hdop ?? null,
+    satellites: t?.satellites ?? null,
+    altitudeM: t?.altitudeM ?? null,
     totalFuelUsedGal: t?.totalFuelUsedGal ?? null,
     engineHours: t?.engineHours ?? null,
     throttlePct: t?.throttlePct ?? null,
