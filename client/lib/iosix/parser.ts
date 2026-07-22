@@ -11,7 +11,7 @@ import { IOSiXData, emptyIOSiXData } from "./types";
 // Field map (verified against raw BLE captures, logs/iosix 2026-07-21):
 //   m[1]  ignition 0/1 (0 = key off; GPS/voltage remain valid)
 //   m[2]  VIN            m[3]  engine RPM
-//   m[4]  GPS speed kph  m[5]  odometer km      m[6]  trip km
+//   m[4]  GPS speed kph  m[5]  odometer km      m[6]  trip km (both → mi)
 //   m[7]  engine hours   m[8]  trip fuel (gallons, monotonic per trip)
 //   m[9]  battery V      m[10] date MM/DD/YY    m[11] time HH:MM:SS UTC
 //   m[12] lat            m[13] lng
@@ -21,7 +21,7 @@ import { IOSiXData, emptyIOSiXData } from "./types";
 const IOSIX_LINE_RE =
   /Data:\s*([01]),([A-Z0-9]{1,32}),(-?\d+),(-?\d+(?:\.\d+)?),([\d.]+),([\d.]+),([\d.]+),([\d.]+),([\d.]+),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(-?\d+\.\d+),(-?\d+\.\d+),(-?\d+),(-?\d+),(-?\d+),(\d+),([\d.]+),(\d+),(\d+)/;
 
-const KPH_TO_MPH = 0.621371;
+const KM_TO_MI = 0.621371;
 const VOLTAGE_MAX = 32;
 const REASSEMBLY_BUFFER_MAX = 8192;
 const REASSEMBLY_BUFFER_TRIM = 4096;
@@ -66,10 +66,15 @@ export function parseLine(line: string): IOSiXData | null {
   data.rpm = clamp(num(m[3]), 0, 4000);
 
   const kph = num(m[4]);
-  data.speedMph = kph !== null ? Math.round(kph * KPH_TO_MPH * 10) / 10 : null;
+  data.speedMph = kph !== null ? Math.round(kph * KM_TO_MI * 10) / 10 : null;
 
-  data.odometerMiles = clamp(num(m[5]), 0, 2_000_000);
-  data.tripMiles = clamp(num(m[6]), 0, 100_000);
+  // f4/f5 are kilometers on the wire (verified: sum of f4 deltas matches the
+  // GPS path integral 1:1, not 1:0.62) — convert to the miles the fields and
+  // DB columns are named for.
+  const odoKm = clamp(num(m[5]), 0, 2_000_000);
+  data.odometerMiles = odoKm !== null ? Math.round(odoKm * KM_TO_MI * 10) / 10 : null;
+  const tripKm = clamp(num(m[6]), 0, 100_000);
+  data.tripMiles = tripKm !== null ? Math.round(tripKm * KM_TO_MI * 10) / 10 : null;
   data.engineHours = clamp(num(m[7]), 0, 200_000);
 
   // f7 is cumulative trip fuel in gallons (monotonic counter), NOT the
