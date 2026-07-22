@@ -89,7 +89,9 @@ export function parseLine(line: string): IOSiXData | null {
 
   // m[14] wheel speed kph: not surfaced — UI uses GPS speed (m[4]).
   data.heading = clamp(num(m[15]), 0, 360);
-  data.currentGear = clamp(num(m[16]), 0, 10);
+  // m[16] is the GPS satellite count, not a gear (the 0-10 clamp used to
+  // mask that). The PT30 stream has no transmission data.
+  data.currentGear = null;
 
   // f17 is HDOP (GPS dilution of precision), NOT a fuel rate — the old
   // ×10/3.785 formula displayed HDOP as a constant ~2-3 gal/h. The PT30 BLE
