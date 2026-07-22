@@ -211,8 +211,12 @@ export default function DashboardScreen() {
                   numberOfLines={1}
                 >
                   {iosix.connected
+                    // Driver-facing telemetry is exactly two values: RPM (f2)
+                    // and battery voltage (f8). With the engine off (f0=0)
+                    // RPM would be a stale/zero reading — show ENGINE OFF
+                    // instead; voltage stays live on battery power.
                     ? iosix.telemetry.ignition === false
-                      ? `ELD · Engine Off${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}`
+                      ? `ELD · ENGINE OFF${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}`
                       : `ELD${iosix.telemetry.rpm !== null ? ` · ${Math.round(iosix.telemetry.rpm)} RPM` : ""}${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}`
                     : iosix.scanning
                     ? "Scanning for ELD..."
