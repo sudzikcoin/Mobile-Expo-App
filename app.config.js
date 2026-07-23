@@ -4,7 +4,7 @@ module.exports = {
   expo: {
     name: "PingPoint Driver",
     slug: "pingpoint-driver",
-    version: "1.6.8",
+    version: "1.6.9",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "pingpoint",
@@ -31,10 +31,10 @@ module.exports = {
       },
     },
     android: {
-      // Keep in lockstep with `version` (1.6.8 -> 168); EAS autoIncrement used
+      // Keep in lockstep with `version` (1.6.9 -> 169); EAS autoIncrement used
       // to own this remotely, but local prebuild emits versionCode 1 without it
       // and Android then refuses the install as a downgrade.
-      versionCode: 168,
+      versionCode: 169,
       adaptiveIcon: {
         backgroundColor: "#0a0a1f",
         foregroundImage: "./assets/images/android-icon-foreground.png",
@@ -52,6 +52,7 @@ module.exports = {
         "RECEIVE_BOOT_COMPLETED",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
+        "FOREGROUND_SERVICE_CONNECTED_DEVICE",
         "POST_NOTIFICATIONS",
         "WAKE_LOCK",
         "BLUETOOTH",

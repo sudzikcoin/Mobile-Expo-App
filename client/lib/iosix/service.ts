@@ -5,6 +5,11 @@ import Constants from "expo-constants";
 import { IOSiXData, emptyIOSiXData } from "./types";
 import { IOSiXCycleBuffer } from "./parser";
 import { setSnapshot } from "./store";
+import {
+  startTelemetryForegroundService,
+  stopTelemetryForegroundService,
+  addTelemetryTickListener,
+} from "../../../modules/pingpoint-telemetry-service";
 
 // The ELD MAC is no longer the arrival mechanism (native GPS geofences are —
 // see transistorsoftTracking.syncStopGeofences). BLE ELD is now a supplementary
@@ -186,6 +191,23 @@ class IOSiXService {
   private rawLogToken: string | null = null;
   private appStateSub: NativeEventSubscription | null = null;
 
+  // Background execution. RN timers are driven by Choreographer frame
+  // callbacks, which Android stops delivering while the host activity is
+  // paused — every setInterval/setTimeout above freezes the moment the driver
+  // switches apps. The native module provides (a) a connectedDevice
+  // foreground service that keeps the process out of the cached-app freezer
+  // so BLE notifications keep flowing, and (b) a Handler-driven 5s tick that
+  // is immune to the pause. onNativeTick() re-runs whichever of the frozen
+  // timers is overdue; in the foreground it is a no-op because the real
+  // timers fire on schedule. Deadlines for the one-shot timers are mirrored
+  // in wall-clock fields so the tick can fire them late.
+  private tickSub: { remove: () => void } | null = null;
+  private fgsStarted = false;
+  private lastFlushAt = 0;
+  private lastUploadAttemptAt = 0;
+  private reconnectDueAt: number | null = null;
+  private scanDeadlineAt: number | null = null;
+
   // Auto arrive/depart state.
   private autoAD: AutoADConfig | null = null;
   private stoppedSinceMs: number | null = null;
@@ -222,6 +244,7 @@ class IOSiXService {
     await this.loadRawLogFromStorage();
     this.startRawLogTimers();
     this.appStateSub = AppState.addEventListener("change", this.handleAppStateChange);
+    this.tickSub = addTelemetryTickListener(() => this.onNativeTick());
 
     try {
       const granted = await this.requestPermissions();
@@ -247,6 +270,12 @@ class IOSiXService {
     } catch {}
     this.appStateSub = null;
     try {
+      this.tickSub?.remove();
+    } catch {}
+    this.tickSub = null;
+    stopTelemetryForegroundService();
+    this.fgsStarted = false;
+    try {
       this.monitorSub?.remove();
       this.disconnectSub?.remove();
     } catch {}
@@ -271,6 +300,8 @@ class IOSiXService {
     if (this.scanTimer) clearTimeout(this.scanTimer);
     this.reconnectTimer = null;
     this.scanTimer = null;
+    this.reconnectDueAt = null;
+    this.scanDeadlineAt = null;
   }
 
   private waitForPoweredOnThenScan(): void {
@@ -290,7 +321,10 @@ class IOSiXService {
     if (!this.manager || !this.started) return;
     this.update({ status: "scanning", error: null });
 
+    this.scanDeadlineAt = Date.now() + SCAN_TIMEOUT_MS;
     this.scanTimer = setTimeout(() => {
+      this.scanTimer = null;
+      this.scanDeadlineAt = null;
       try {
         this.manager?.stopDeviceScan();
       } catch {}
@@ -321,6 +355,7 @@ class IOSiXService {
         clearTimeout(this.scanTimer);
         this.scanTimer = null;
       }
+      this.scanDeadlineAt = null;
       void this.connectTo(scanned);
     });
   }
@@ -365,9 +400,23 @@ class IOSiXService {
       );
       this.reconnectAttempts = 0;
       this.update({ status: "connected", error: null });
+      this.ensureForegroundService();
     } catch (e) {
       this.scheduleReconnect(this.errMsg(e));
     }
+  }
+
+  // Start the connectedDevice foreground service once we actually talk to a
+  // dongle (drivers without one never see the extra notification). It stays
+  // up across disconnects until stop() so the process survives backgrounded
+  // reconnect cycles; startForegroundService is only legal from the
+  // foreground on Android 12+, hence the retry on the next "active".
+  private ensureForegroundService(): void {
+    if (Platform.OS !== "android" || this.fgsStarted) return;
+    this.fgsStarted = startTelemetryForegroundService(
+      "PingPoint tracking active",
+      "Streaming truck telemetry",
+    );
   }
 
   private ingestFrame(raw: string): void {
@@ -400,9 +449,51 @@ class IOSiXService {
       RECONNECT_INTERVAL_MS * 2 ** this.reconnectAttempts,
     );
     this.reconnectAttempts += 1;
+    this.reconnectDueAt = Date.now() + delay;
     this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.reconnectDueAt = null;
       if (this.started) this.startScan();
     }, delay);
+  }
+
+  // Driven by the native 5s tick (see field comments). Each branch acts only
+  // when the corresponding timer is overdue, so cadence is unchanged and in
+  // the foreground — where the real timers fire on time — this is a no-op.
+  private onNativeTick(): void {
+    if (!this.started) return;
+    const now = Date.now();
+    if (now - this.lastFlushAt >= RAW_LOG_FLUSH_MS) {
+      void this.flushRawLogToStorage();
+    }
+    if (now - this.lastUploadAttemptAt >= RAW_LOG_UPLOAD_MS) {
+      void this.uploadRawLog();
+    }
+    if (
+      this.reconnectTimer &&
+      this.reconnectDueAt !== null &&
+      now >= this.reconnectDueAt
+    ) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+      this.reconnectDueAt = null;
+      this.startScan();
+    }
+    if (
+      this.scanTimer &&
+      this.scanDeadlineAt !== null &&
+      now >= this.scanDeadlineAt
+    ) {
+      clearTimeout(this.scanTimer);
+      this.scanTimer = null;
+      this.scanDeadlineAt = null;
+      try {
+        this.manager?.stopDeviceScan();
+      } catch {}
+      if (this.state.status === "scanning") {
+        this.scheduleReconnect("scan_timeout");
+      }
+    }
   }
 
   private errMsg(e: unknown): string {
@@ -442,6 +533,7 @@ class IOSiXService {
   }
 
   private async flushRawLogToStorage(): Promise<void> {
+    this.lastFlushAt = Date.now();
     if (!this.rawLogDirty) return;
     try {
       await AsyncStorage.setItem(RAW_LOG_KEY, JSON.stringify(this.rawLogBuffer));
@@ -488,12 +580,17 @@ class IOSiXService {
       ) {
         clearTimeout(this.reconnectTimer);
         this.reconnectTimer = null;
+        this.reconnectDueAt = null;
         this.startScan();
       }
+      // A foreground-service start that was rejected (or the module racing
+      // app startup) gets another chance now that we're legally foreground.
+      if (this.device) this.ensureForegroundService();
     }
   };
 
   async uploadRawLog(): Promise<boolean> {
+    this.lastUploadAttemptAt = Date.now();
     const token = this.rawLogToken;
     if (!token) return false;
     // One POST at a time. On a slow cell link a request can outlive the 5s

@@ -1,0 +1,36 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml:1:1-15:12
+INJECTED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml:1:1-15:12
+	package
+		INJECTED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml:1:11-69
+uses-permission#android.permission.FOREGROUND_SERVICE
+ADDED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml:6:5-77
+	android:name
+		ADDED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml:6:22-74
+uses-permission#android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE
+ADDED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml:7:5-94
+	android:name
+		ADDED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml:7:22-91
+application
+ADDED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml:8:5-14:19
+service#expo.modules.pptelemetry.PPTelemetryForegroundService
+ADDED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml:9:9-13:63
+	android:enabled
+		ADDED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml:11:13-35
+	android:exported
+		ADDED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml:12:13-37
+	android:foregroundServiceType
+		ADDED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml:13:13-60
+	android:name
+		ADDED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml:10:13-81
+uses-sdk
+INJECTED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml
+INJECTED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /root/Mobile-Expo-App/modules/pingpoint-telemetry-service/android/src/main/AndroidManifest.xml

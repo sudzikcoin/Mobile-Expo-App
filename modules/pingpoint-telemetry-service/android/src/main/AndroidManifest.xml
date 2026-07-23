@@ -1,0 +1,15 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- FOREGROUND_SERVICE_CONNECTED_DEVICE is the Android 14+ (API 34)
+         gate for starting a connectedDevice-typed foreground service; the
+         runtime prerequisite (BLUETOOTH_CONNECT) is requested by the app
+         before the service is ever started. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <application>
+        <service
+            android:name="expo.modules.pptelemetry.PPTelemetryForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+    </application>
+</manifest>
