@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 
@@ -25,6 +26,8 @@ class PPTelemetryForegroundService : Service() {
     private const val NOTIFICATION_ID = 27182
   }
 
+  private var wakeLock: PowerManager.WakeLock? = null
+
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -38,6 +41,19 @@ class PPTelemetryForegroundService : Service() {
           ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
         else 0
       ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
+      // The foreground service keeps the process alive, but with the screen
+      // off some OEMs still gate CPU for apps without a wake lock, which
+      // would stall the 5s tick (and with it every upload) between BLE
+      // interrupts. Held for the whole dongle session; released in
+      // onDestroy, and by the kernel if the process dies.
+      if (wakeLock == null) {
+        wakeLock = getSystemService(PowerManager::class.java)
+          ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PingPoint:telemetry")
+          ?.apply {
+            setReferenceCounted(false)
+            acquire()
+          }
+      }
     } catch (t: Throwable) {
       // Missing runtime prerequisite (e.g. BLUETOOTH_CONNECT revoked) — a
       // dead service is better than a crash loop; JS retries on reconnect.
@@ -49,6 +65,10 @@ class PPTelemetryForegroundService : Service() {
   }
 
   override fun onDestroy() {
+    try {
+      wakeLock?.release()
+    } catch (_: Throwable) {}
+    wakeLock = null
     ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
     super.onDestroy()
   }

@@ -77,13 +77,10 @@ const RAW_LOG_UPLOAD_MS = 5_000;
 const RAW_LOG_UPLOAD_BATCH = 500;
 // Abort a stuck POST so the in-flight guard can't wedge the stream: okhttp
 // will happily hold a socket open for minutes in a dead-LTE spot, and every
-// tick skipped behind it is telemetry the server never sees.
+// tick skipped behind it is telemetry the server never sees. Applied as
+// xhr.timeout, which Android enforces natively (OkHttp callTimeout) — it
+// fires even while JS timers are frozen in the background.
 const RAW_LOG_UPLOAD_TIMEOUT_MS = 20_000;
-// JS-side settlement backstop for the race in uploadRawLog(): abort() only
-// helps if the native layer actually delivers a rejection back to JS. Field
-// evidence (2026-07-23, 5G→weak LTE) shows a wedged request can swallow the
-// abort and never settle — this timer settles the await in pure JS.
-const RAW_LOG_UPLOAD_HARD_TIMEOUT_MS = RAW_LOG_UPLOAD_TIMEOUT_MS + 5_000;
 // If the in-flight guard is older than this, its owner is presumed dead
 // (promise that never settled) and the guard is reclaimed.
 const RAW_LOG_UPLOAD_STALE_MS = 60_000;
@@ -188,6 +185,9 @@ class IOSiXService {
   // counter invalidates a zombie upload after its guard is reclaimed.
   private rawLogUploadStartedAt: number | null = null;
   private rawLogUploadGen = 0;
+  // The in-flight request, so a stale-guard reclaim can kill the zombie's
+  // socket instead of leaving OkHttp streaming into a request nobody owns.
+  private uploadXhr: XMLHttpRequest | null = null;
   private rawLogToken: string | null = null;
   private appStateSub: NativeEventSubscription | null = null;
 
@@ -589,6 +589,34 @@ class IOSiXService {
     }
   };
 
+  // POST one batch over a bare XMLHttpRequest instead of fetch(). fetch in
+  // React Native is the whatwg-fetch polyfill, and it resolves its promise
+  // inside setTimeout(0) — for onload, onerror, ontimeout AND onabort. JS
+  // timers stop the moment the host activity pauses (JavaTimerManager
+  // .onHostPause clears the Choreographer frame callback), so a backgrounded
+  // upload could complete server-side in 100 ms and still never settle in JS
+  // (2026-07-23 field test: guard freed only by the 60 s stale reclaim, the
+  // unsliced batch re-sent every reclaim — the server logged the same 500
+  // entries four times in a row). XHR has neither problem: React Native
+  // dispatches load/error/timeout synchronously from the native completion
+  // event, and xhr.timeout is enforced natively by OkHttp — no JS timer
+  // anywhere in the settle path.
+  private postRawLogBatch(token: string, body: string): Promise<{ ok: boolean }> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      this.uploadXhr = xhr;
+      xhr.open("POST", `${RAW_LOG_API_BASE}/api/driver/${token}/iosix-raw-log`);
+      xhr.timeout = RAW_LOG_UPLOAD_TIMEOUT_MS;
+      xhr.setRequestHeader("Content-Type", "application/json");
+      xhr.setRequestHeader("Accept", "application/json");
+      xhr.onload = () => resolve({ ok: xhr.status >= 200 && xhr.status < 300 });
+      xhr.onerror = () => reject(new Error("raw_log_upload_network_error"));
+      xhr.ontimeout = () => reject(new Error("raw_log_upload_timeout"));
+      xhr.onabort = () => reject(new Error("raw_log_upload_aborted"));
+      xhr.send(body);
+    });
+  }
+
   async uploadRawLog(): Promise<boolean> {
     this.lastUploadAttemptAt = Date.now();
     const token = this.rawLogToken;
@@ -598,15 +626,12 @@ class IOSiXService {
     // buffer and each slice a batch off on success — the server gets one
     // batch twice and a batch of unsent entries is silently dropped.
     //
-    // The guard is a timestamp, not a boolean: the abort timeout only clears
-    // the guard if the awaited fetch actually settles, and a request wedged
-    // on a dying cell link can swallow abort() and never settle (2026-07-23
-    // truck test: uploads stopped permanently at a 5G→weak-LTE transition
-    // while /ping on fresh sockets kept working; app restart fixed it). A
-    // guard older than RAW_LOG_UPLOAD_STALE_MS is treated as dead and
-    // reclaimed. The generation counter keeps such a zombie — should it
-    // settle much later after all — from double-slicing the buffer or
-    // clearing the new owner's guard.
+    // The guard is a timestamp, not a boolean: settlement is normally
+    // guaranteed by the native xhr.timeout, but if a request somehow never
+    // settles anyway, a guard older than RAW_LOG_UPLOAD_STALE_MS is treated
+    // as dead and reclaimed. The generation counter keeps such a zombie —
+    // should it settle much later after all — from double-slicing the buffer
+    // or clearing the new owner's guard.
     const now = Date.now();
     if (
       this.rawLogUploadStartedAt !== null &&
@@ -614,13 +639,16 @@ class IOSiXService {
     ) {
       return false;
     }
+    if (this.rawLogUploadStartedAt !== null && this.uploadXhr) {
+      // Reclaiming a stale guard: kill the zombie's socket as well. Its
+      // handlers are gen-checked, so this can't clobber the new owner.
+      try {
+        this.uploadXhr.abort();
+      } catch {}
+    }
     const gen = ++this.rawLogUploadGen;
     this.rawLogUploadStartedAt = now;
-    let abortTimer: ReturnType<typeof setTimeout> | null = null;
-    let hardTimer: ReturnType<typeof setTimeout> | null = null;
     try {
-      const controller = new AbortController();
-      abortTimer = setTimeout(() => controller.abort(), RAW_LOG_UPLOAD_TIMEOUT_MS);
       // Snapshot buffer + persisted merge: we prefer uploading what's in memory
       // since it's the latest; on success we clear both.
       await this.flushRawLogToStorage().catch(() => {});
@@ -629,26 +657,10 @@ class IOSiXService {
       // single oversized POST.
       const snapshot = this.rawLogBuffer.slice(0, RAW_LOG_UPLOAD_BATCH);
       if (snapshot.length === 0) return true;
-      const fetchPromise = fetch(`${RAW_LOG_API_BASE}/api/driver/${token}/iosix-raw-log`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ entries: snapshot, appVersion: APP_VERSION }),
-        signal: controller.signal,
-      });
-      // If the race below abandons this fetch, a late rejection must not
-      // surface as an unhandled rejection.
-      fetchPromise.catch(() => {});
-      // Settlement is guaranteed in pure JS: even if abort() never propagates
-      // out of the native request, the hard timer rejects this await.
-      const res = await Promise.race([
-        fetchPromise,
-        new Promise<never>((_, reject) => {
-          hardTimer = setTimeout(
-            () => reject(new Error("raw_log_upload_timeout")),
-            RAW_LOG_UPLOAD_HARD_TIMEOUT_MS,
-          );
-        }),
-      ]);
+      const res = await this.postRawLogBatch(
+        token,
+        JSON.stringify({ entries: snapshot, appVersion: APP_VERSION }),
+      );
       // A newer upload reclaimed the guard while this one dawdled — it owns
       // the buffer now; slicing here would drop entries it hasn't sent.
       if (gen !== this.rawLogUploadGen) return false;
@@ -663,9 +675,10 @@ class IOSiXService {
       // retried on the next 5s tick — nothing is dropped here.
       return false;
     } finally {
-      if (abortTimer) clearTimeout(abortTimer);
-      if (hardTimer) clearTimeout(hardTimer);
-      if (gen === this.rawLogUploadGen) this.rawLogUploadStartedAt = null;
+      if (gen === this.rawLogUploadGen) {
+        this.rawLogUploadStartedAt = null;
+        this.uploadXhr = null;
+      }
     }
   }
 

@@ -5,6 +5,9 @@
          before the service is ever started. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Partial wake lock held while the dongle session's foreground service
+         is up, so the 5s telemetry tick keeps firing with the screen off. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <application>
         <service
             android:name="expo.modules.pptelemetry.PPTelemetryForegroundService"
