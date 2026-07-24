@@ -45,3 +45,4 @@ app-example
 
 # Firebase admin SDK secret (defense in depth)
 firebase-service-account.json
+credentials.json
