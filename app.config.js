@@ -119,7 +119,12 @@ module.exports = {
         // Android is unaffected.
         "expo-build-properties",
         {
-          ios: { useFrameworks: "static" },
+          ios: {
+            useFrameworks: "static",
+            // RNFB pods include non-modular React-Core headers, fatal when
+            // they build as framework modules — link them as static libs.
+            forceStaticLinking: ["RNFBApp", "RNFBMessaging"],
+          },
         },
       ],
       [
