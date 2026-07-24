@@ -9,16 +9,14 @@ import { getEldMac } from "./iosix/service";
 
 const PINGPOINT_API = "https://pingpoint.suverse.io";
 
-// FCM is Android-only for now. On iOS the committed GoogleService-Info.plist
-// is a placeholder, so any messaging() call would either throw ("no default
-// Firebase app") or register a token FCM can't actually deliver to (no APNs
-// key uploaded). Also note the whole silent-push -> one-GPS-ping flow needs
-// rethinking on iOS: data-only FCM maps to `content-available` pushes, which
-// iOS throttles and may drop entirely for force-quit apps.
-// TODO(iOS): flip to `true` after (1) real GoogleService-Info.plist,
-// (2) APNs auth key in Firebase, (3) Push Notifications capability on the
-// App ID — then verify delivery on a physical device (simulator has no APNs).
-export const FCM_SUPPORTED = Platform.OS === "android";
+// Enabled on both platforms: the real GoogleService-Info.plist is committed
+// and the APNs auth key is uploaded to Firebase. Caveat on iOS: the
+// silent-push -> one-GPS-ping flow rides on data-only FCM, which maps to
+// `content-available` pushes — iOS throttles those and drops them entirely
+// for force-quit apps, so delivery must be verified on a physical device
+// (simulator has no APNs).
+export const FCM_SUPPORTED =
+  Platform.OS === "android" || Platform.OS === "ios";
 
 // Send a single GPS ping to the backend, mirroring the payload the
 // background TaskManager produces. Used by the FCM data-message handler

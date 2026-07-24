@@ -159,9 +159,8 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       fcmFgUnsubRef.current = null;
     }
     fcmRefreshUnsubRef.current = subscribeToFcmTokenRefresh(driverToken);
-    // messaging() throws on iOS while the Firebase iOS app is a placeholder —
     // registerFcmTokenForDriver/subscribeToFcmTokenRefresh self-guard, this
-    // direct call must too. TODO(iOS): remove guard once FCM_SUPPORTED flips.
+    // direct messaging() call must too.
     if (FCM_SUPPORTED) {
       fcmFgUnsubRef.current = messaging().onMessage(async (msg) => {
         console.log("[FCM][fg] message received");
