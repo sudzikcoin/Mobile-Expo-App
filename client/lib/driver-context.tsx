@@ -11,9 +11,17 @@ import {
   getTruckToken,
   setTruckToken,
   getTruckId,
+  getTruckSetupComplete,
+  clearTruckSession,
   isTruckToken,
   maskToken,
 } from "./storage";
+import {
+  bindDriverToken,
+  persistBinding,
+  findDeferredDrvToken,
+  isDrvToken,
+} from "./binding";
 import {
   initTracking,
   stopTracking,
@@ -41,6 +49,9 @@ import messaging from "@react-native-firebase/messaging";
 interface DriverContextType {
   token: string | null;
   isLoading: boolean;
+  // null = still restoring from AsyncStorage; false = show the waiting
+  // screen; true = device is bound (token present / legacy setup complete).
+  isBound: boolean | null;
   error: string | null;
   load: Load | null;
   balance: number;
@@ -49,6 +60,7 @@ interface DriverContextType {
   isLocationDenied: boolean;
   lastPingTime: Date | null;
   setToken: (token: string) => Promise<void>;
+  clearBinding: () => Promise<void>;
   refreshLoad: () => Promise<void>;
   toggleLocation: () => Promise<void>;
   openSettings: () => Promise<void>;
@@ -74,6 +86,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 
 export function DriverProvider({ children }: { children: ReactNode }) {
   const [token, setTokenState] = useState<string | null>(null);
+  const [isBound, setIsBound] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [load, setLoad] = useState<Load | null>(null);
@@ -178,15 +191,55 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       console.log("[Driver] Setting token:", maskToken(newToken));
       if (isTruckToken(newToken)) {
         await setTruckToken(newToken);
-      } else {
-        await saveDriverToken(newToken);
+        setTokenState(newToken);
+        setIsBound(true);
+        setError(null);
+        wireFcm(newToken);
+        return;
       }
+      // drv_ token (universal link, install referrer, pending-match or legacy
+      // next-load rotation): exchange it for the permanent trk_ binding. This
+      // is the single choke point — every entry path funnels through here, so
+      // a re-tap of a newer link re-binds the device (phone swap / truck
+      // change) no matter how the token arrived.
+      if (isDrvToken(newToken)) {
+        const result = await bindDriverToken(newToken);
+        if (result.status === "bound") {
+          await persistBinding(result.binding);
+          setTokenState(result.binding.token);
+          setIsBound(true);
+          setError(null);
+          wireFcm(result.binding.token);
+          return;
+        }
+        if (result.status === "invalid") {
+          // Rotated or unknown link — keep whatever binding the device has.
+          console.warn("[Driver] Ignoring invalid drv link");
+          setError("This load link is no longer valid. Ask your dispatcher for a new one.");
+          return;
+        }
+        // Network/server hiccup: fall back to the legacy per-load drv flow so
+        // the driver still sees the load; a later link tap can re-bind.
+        console.warn("[Driver] Bind unavailable — falling back to legacy drv token");
+      }
+      await saveDriverToken(newToken);
       setTokenState(newToken);
+      setIsBound(true);
       setError(null);
       wireFcm(newToken);
     },
     [wireFcm],
   );
+
+  // Drop the device binding (Settings → Switch Truck). The [token] effect's
+  // cleanup stops transistorsoft tracking when the token goes null.
+  const clearBinding = useCallback(async () => {
+    await clearTruckSession();
+    setTokenState(null);
+    setIsBound(false);
+    setLoad(null);
+    setError(null);
+  }, []);
 
   const refreshLoad = useCallback(async () => {
     if (!token || token === "undefined" || token === "null") {
@@ -444,18 +497,39 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       try {
         // Truck token (new flow) takes precedence over per-load drv_xxx.
         const savedToken = await getActiveToken();
+        const setupComplete = await getTruckSetupComplete();
         // Variant 1: tracking always on. Force-persist true so reads stay stable.
         await saveLocationEnabled(true);
 
         if (savedToken) {
           setTokenState(savedToken);
+          setIsBound(true);
           // Re-register FCM + subscriptions on cold start too. FCM tokens
           // rotate; a fleet that only deep-links once (then always restarts
           // normally) would otherwise never report the rotated token.
           wireFcm(savedToken);
+        } else {
+          setIsBound(setupComplete);
         }
 
         setIsLocationEnabled(true);
+
+        // Deferred deep link: unbound launch — the install may have been
+        // triggered by a /driver/drv_* link tapped BEFORE the app existed on
+        // this device. Ask the Install Referrer (Android) / the server's
+        // pending-install fingerprint store for the drv token and bind
+        // silently. Skipped when this launch itself carries a link (the URL
+        // effect below owns that path).
+        if (!savedToken && !setupComplete) {
+          const initialUrl = await Linking.getInitialURL();
+          if (!initialUrl || !initialUrl.includes("/driver/")) {
+            const deferred = await findDeferredDrvToken();
+            if (deferred && !tokenRef.current) {
+              console.log("[Driver] Deferred deep link found — binding silently");
+              await setToken(deferred);
+            }
+          }
+        }
 
         // Transistorsoft survives boot via startOnBoot:true and survives
         // process kill via stopOnTerminate:false. On a normal cold-start we
@@ -469,7 +543,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     };
 
     init();
-  }, [wireFcm]);
+  }, [wireFcm, setToken]);
 
   useEffect(() => {
     const handleUrl = (event: { url: string }) => {
@@ -586,6 +660,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       value={{
         token,
         isLoading,
+        isBound,
         error,
         load,
         balance,
@@ -594,6 +669,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         isLocationDenied,
         lastPingTime,
         setToken,
+        clearBinding,
         refreshLoad,
         toggleLocation,
         openSettings,

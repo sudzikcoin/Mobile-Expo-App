@@ -17,6 +17,7 @@ import { useDriver } from "@/lib/driver-context";
 import { maskToken } from "@/lib/storage";
 import { useAppTheme } from "@/lib/theme-context";
 import { useIOSiXTelemetry } from "@/lib/iosix/hook";
+import { kphToMph } from "@/lib/units";
 import type { DrawerParamList } from "@/navigation/DrawerNavigator";
 
 type DashboardRouteProp = RouteProp<DrawerParamList, "Dashboard">;
@@ -44,6 +45,17 @@ export default function DashboardScreen() {
   } = useDriver();
 
   const iosix = useIOSiXTelemetry(true);
+
+  // Pill speed: ECU road speed (f3) when present and sane, else GPS ground
+  // speed (f13). Integer mph; null hides the segment entirely.
+  const pillSpeedKph =
+    iosix.telemetry.ecuSpeedKph !== null &&
+    iosix.telemetry.ecuSpeedKph >= 0 &&
+    iosix.telemetry.ecuSpeedKph <= 200
+      ? iosix.telemetry.ecuSpeedKph
+      : iosix.telemetry.gpsSpeedKph;
+  const pillSpeedMph =
+    pillSpeedKph !== null ? Math.round(kphToMph(pillSpeedKph)) : null;
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -211,13 +223,17 @@ export default function DashboardScreen() {
                   numberOfLines={1}
                 >
                   {iosix.connected
-                    // Driver-facing telemetry is exactly two values: RPM (f2)
-                    // and battery voltage (f8). With the engine off (f0=0)
-                    // RPM would be a stale/zero reading — show ENGINE OFF
-                    // instead; voltage stays live on battery power.
+                    // Driver-facing telemetry: RPM (f2), battery voltage (f8)
+                    // and road speed. Speed prefers the ECU value (f3) when
+                    // present and sane — it is hard 0 with the engine off and
+                    // governed at 120 km/h — falling back to GPS ground speed
+                    // (f13, drifts a few km/h parked but works without ECU
+                    // data). With the engine off (f0=0) RPM would be a
+                    // stale/zero reading — show ENGINE OFF instead; voltage
+                    // stays live on battery power.
                     ? iosix.telemetry.ignition === false
                       ? `ELD · ENGINE OFF${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}`
-                      : `ELD${iosix.telemetry.rpm !== null ? ` · ${Math.round(iosix.telemetry.rpm)} RPM` : ""}${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}`
+                      : `ELD${iosix.telemetry.rpm !== null ? ` · ${Math.round(iosix.telemetry.rpm)} RPM` : ""}${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}${pillSpeedMph !== null ? ` · ${pillSpeedMph} mph` : ""}`
                     : iosix.scanning
                     ? "Scanning for ELD..."
                     : iosix.error === "ble_permission_denied"

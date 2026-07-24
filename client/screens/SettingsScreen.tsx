@@ -10,7 +10,8 @@ import { PingPointColors, Spacing, BorderRadius, Typography, Shadows } from "@/c
 import { useAppTheme } from "@/lib/theme-context";
 import { useNavigation } from "@react-navigation/native";
 import { useState, useEffect, useCallback } from "react";
-import { getTruckNumber, getDriverName, getCompanyName, clearTruckSession } from "@/lib/storage";
+import { getTruckNumber, getDriverName, getCompanyName } from "@/lib/storage";
+import { useDriver } from "@/lib/driver-context";
 import { Alert } from "react-native";
 
 interface SettingRowProps {
@@ -92,6 +93,7 @@ function SettingRow({
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { appTheme, setAppTheme, colors, isArcade } = useAppTheme();
+  const { clearBinding } = useDriver();
   const navigation = useNavigation<any>();
   const [truckNumber, setTruckNumberState] = useState<string | null>(null);
   const [driverName, setDriverNameState] = useState<string | null>(null);
@@ -118,17 +120,17 @@ export default function SettingsScreen() {
     }
     Alert.alert(
       "Switch Truck?",
-      "This will sign out of the current truck and return you to the picker. Your tracking data on the server is not affected.",
+      "This will sign out of the current truck. Tap a new load link (or use the service entrance) to bind again. Your tracking data on the server is not affected.",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Switch",
           style: "destructive",
           onPress: async () => {
-            await clearTruckSession();
+            await clearBinding();
             navigation.reset({
               index: 0,
-              routes: [{ name: "TruckSetup" }],
+              routes: [{ name: "Waiting" }],
             });
           },
         },

@@ -100,7 +100,7 @@ interface ActionResponse {
   newBalance: number;
 }
 
-function getProductionApiUrl(): string {
+export function getProductionApiUrl(): string {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
   if (envUrl && envUrl.includes("pingpoint.suverse.io")) {
     return envUrl;

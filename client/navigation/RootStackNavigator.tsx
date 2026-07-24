@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { NavigatorScreenParams } from "@react-navigation/native";
 import DrawerNavigator, { DrawerParamList } from "@/navigation/DrawerNavigator";
 import TruckSetupScreen from "@/screens/TruckSetupScreen";
+import WaitingScreen from "@/screens/WaitingScreen";
 import { PingPointColors } from "@/constants/theme";
-import { getTruckSetupComplete } from "@/lib/storage";
+import { useDriver } from "@/lib/driver-context";
 import { View, ActivityIndicator } from "react-native";
 
 export type RootStackParamList = {
+  Waiting: undefined;
   TruckSetup: undefined;
   Main: NavigatorScreenParams<DrawerParamList>;
 };
@@ -15,19 +17,12 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootStackNavigator() {
-  const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
+  // Binding state lives in DriverContext: true once a token is persisted
+  // (link-based bind, deferred deep link, or the hidden legacy flow).
+  const { isBound } = useDriver();
 
-  useEffect(() => {
-    checkSetup();
-  }, []);
-
-  const checkSetup = async () => {
-    const complete = await getTruckSetupComplete();
-    setSetupComplete(complete);
-  };
-
-  // Показываем загрузку пока проверяем AsyncStorage
-  if (setupComplete === null) {
+  // Показываем загрузку пока восстанавливаем сессию из AsyncStorage
+  if (isBound === null) {
     return (
       <View style={{ flex: 1, backgroundColor: PingPointColors.background, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" color={PingPointColors.cyan} />
@@ -37,19 +32,22 @@ export default function RootStackNavigator() {
 
   return (
     <Stack.Navigator
-      initialRouteName={setupComplete ? "Main" : "TruckSetup"}
+      initialRouteName={isBound ? "Main" : "Waiting"}
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: PingPointColors.background },
         animation: "fade",
       }}
     >
+      <Stack.Screen name="Waiting" component={WaitingScreen} />
+      {/* Legacy Select Company → Select Truck flow. Reachable ONLY through
+          the hidden service entrance on the waiting screen (5 taps on the
+          logo) — never the default onboarding path. */}
       <Stack.Screen name="TruckSetup">
         {(props) => (
           <TruckSetupScreen
             {...props}
             onComplete={() => {
-              setSetupComplete(true);
               props.navigation.replace("Main");
             }}
           />
