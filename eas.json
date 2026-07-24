@@ -36,6 +36,13 @@
       "env": {
         "EXPO_PUBLIC_AGENTOS_INTERNAL_KEY": "pingpoint-internal-2024"
       }
+    },
+    "ios-testflight": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_AGENTOS_INTERNAL_KEY": "pingpoint-internal-2024"
+      }
     }
   },
   "submit": {
