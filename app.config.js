@@ -113,6 +113,16 @@ module.exports = {
     },
     plugins: [
       [
+        // Firebase's Swift pods (FirebaseCoreInternal -> GoogleUtilities)
+        // can't build as plain static libraries; react-native-firebase's
+        // documented Expo fix is static frameworks. iOS-only setting —
+        // Android is unaffected.
+        "expo-build-properties",
+        {
+          ios: { useFrameworks: "static" },
+        },
+      ],
+      [
         "expo-splash-screen",
         {
           image: "./assets/images/splash-icon.png",
