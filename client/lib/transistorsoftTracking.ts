@@ -3,6 +3,7 @@ import BackgroundGeolocation, {
   Location,
 } from "react-native-background-geolocation";
 import { Alert, PermissionsAndroid, Platform } from "react-native";
+import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const PINGPOINT_BASE = "https://pingpoint.suverse.io";
@@ -85,8 +86,29 @@ export async function syncStopGeofences(
 // Android 13+ (API 33) requires runtime grant for POST_NOTIFICATIONS, even
 // when the permission is in the manifest. Without it the foreground-service
 // notification is suppressed and the OS kills the tracking process within
-// ~10s of backgrounding. Older Android and iOS auto-grant.
+// ~10s of backgrounding. Older Android auto-grants.
+// iOS never auto-grants: without an explicit UNUserNotificationCenter request
+// the stop arrive/depart local notifications (notifications.ts) are silently
+// dropped. Unlike Android, tracking itself does NOT depend on this on iOS —
+// there is no foreground-service notification — so a denial only mutes the
+// feedback channel.
 export async function requestNotificationPermission(): Promise<boolean> {
+  if (Platform.OS === "ios") {
+    try {
+      const current = await Notifications.getPermissionsAsync();
+      if (current.granted) return true;
+      const asked = await Notifications.requestPermissionsAsync({
+        ios: { allowAlert: true, allowSound: true, allowBadge: false },
+      });
+      return (
+        asked.granted ||
+        asked.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
+      );
+    } catch (err) {
+      console.warn("[Permissions] iOS notification request failed:", err);
+      return false;
+    }
+  }
   if (Platform.OS !== "android" || Platform.Version < 33) return true;
   try {
     const result = await PermissionsAndroid.request(

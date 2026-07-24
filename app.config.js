@@ -13,10 +13,13 @@ module.exports = {
     ios: {
       supportsTablet: false,
       bundleIdentifier: "com.pingpoint.driver",
-      associatedDomains: [
-        "applinks:pingpoint.suverse.io",
-        "applinks:pingpoint.suverse.io",
-      ],
+      // PLACEHOLDER — structurally valid but fake. @react-native-firebase/app
+      // refuses to prebuild the iOS project without one. Replace with the real
+      // file from the Firebase console (add an iOS app to the pingpoint
+      // project) before any push-notification work; APNs also needs the Push
+      // Notifications capability + an APNs key uploaded to Firebase.
+      googleServicesFile: "./GoogleService-Info.plist",
+      associatedDomains: ["applinks:pingpoint.suverse.io"],
       infoPlist: {
         NSLocationWhenInUseUsageDescription:
           "PingPoint Driver needs your location to track deliveries and share your position with dispatchers.",
@@ -26,7 +29,22 @@ module.exports = {
           "PingPoint Driver connects to your truck's IOSiX ELD over Bluetooth to report engine telemetry.",
         NSBluetoothPeripheralUsageDescription:
           "PingPoint Driver connects to your truck's IOSiX ELD over Bluetooth to report engine telemetry.",
-        UIBackgroundModes: ["location", "location", "bluetooth-central"],
+        // transistorsoft uses CMMotionActivityManager for motion detection;
+        // without this key iOS kills the app the moment the SDK touches it.
+        NSMotionUsageDescription:
+          "PingPoint Driver uses motion activity to detect when your truck starts and stops moving, which saves battery during long stops.",
+        // location + bluetooth-central: GPS tracking and BLE ELD frames in
+        // background. fetch/processing: TSBackgroundFetch (transistorsoft's
+        // scheduler, pulled in via react-native-background-fetch) registers
+        // BGTaskScheduler tasks; iOS 13+ requires the permitted-identifiers
+        // list to name them or registration throws at launch.
+        UIBackgroundModes: [
+          "location",
+          "bluetooth-central",
+          "fetch",
+          "processing",
+        ],
+        BGTaskSchedulerPermittedIdentifiers: ["com.transistorsoft.fetch"],
         ITSAppUsesNonExemptEncryption: false,
       },
     },

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  PLACEHOLDER — NOT a real Firebase iOS config. Every value below is fake.
+  It exists only so `expo prebuild -platform ios` succeeds (the
+  @react-native-firebase/app config plugin hard-fails without a plist).
+
+  Before shipping or testing push on iOS:
+    1. Firebase console -> project pingpoint-XXXX -> Add app -> iOS,
+       bundle id com.pingpoint.driver.
+    2. Download the generated GoogleService-Info.plist and replace this file.
+    3. Upload an APNs auth key (.p8) to Firebase Cloud Messaging settings.
+  With this placeholder in place, FCM calls on iOS are compile-safe but are
+  additionally disabled at runtime — see FCM_SUPPORTED in client/lib/fcm.ts.
+-->
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyA-PLACEHOLDER-REPLACE-ME-0000000000</string>
+	<key>GCM_SENDER_ID</key>
+	<string>000000000000</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.pingpoint.driver</string>
+	<key>PROJECT_ID</key>
+	<string>placeholder-replace-me</string>
+	<key>STORAGE_BUCKET</key>
+	<string>placeholder-replace-me.appspot.com</string>
+	<key>IS_ADS_ENABLED</key>
+	<false/>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false/>
+	<key>IS_APPINVITE_ENABLED</key>
+	<false/>
+	<key>IS_GCM_ENABLED</key>
+	<true/>
+	<key>IS_SIGNIN_ENABLED</key>
+	<false/>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:000000000000:ios:0000000000000000000000</string>
+</dict>
+</plist>

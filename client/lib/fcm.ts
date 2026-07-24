@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import messaging, {
   FirebaseMessagingTypes,
 } from "@react-native-firebase/messaging";
@@ -7,6 +8,17 @@ import { getFreshTelemetry } from "./iosix/store";
 import { getEldMac } from "./iosix/service";
 
 const PINGPOINT_API = "https://pingpoint.suverse.io";
+
+// FCM is Android-only for now. On iOS the committed GoogleService-Info.plist
+// is a placeholder, so any messaging() call would either throw ("no default
+// Firebase app") or register a token FCM can't actually deliver to (no APNs
+// key uploaded). Also note the whole silent-push -> one-GPS-ping flow needs
+// rethinking on iOS: data-only FCM maps to `content-available` pushes, which
+// iOS throttles and may drop entirely for force-quit apps.
+// TODO(iOS): flip to `true` after (1) real GoogleService-Info.plist,
+// (2) APNs auth key in Firebase, (3) Push Notifications capability on the
+// App ID — then verify delivery on a physical device (simulator has no APNs).
+export const FCM_SUPPORTED = Platform.OS === "android";
 
 // Send a single GPS ping to the backend, mirroring the payload the
 // background TaskManager produces. Used by the FCM data-message handler
@@ -136,6 +148,7 @@ async function postFcmTokenToBackend(
 export async function registerFcmTokenForDriver(
   driverToken: string,
 ): Promise<void> {
+  if (!FCM_SUPPORTED) return;
   try {
     const authStatus = await messaging().requestPermission();
     const enabled =
@@ -159,6 +172,7 @@ export async function registerFcmTokenForDriver(
 // Subscribe to FCM token refresh events (token rotates periodically) and
 // re-register with the backend. Returns an unsubscribe fn.
 export function subscribeToFcmTokenRefresh(driverToken: string): () => void {
+  if (!FCM_SUPPORTED) return () => {};
   const unsubscribe = messaging().onTokenRefresh((newToken) => {
     console.log("[FCM][refresh] new token, re-registering");
     void postFcmTokenToBackend(driverToken, newToken);

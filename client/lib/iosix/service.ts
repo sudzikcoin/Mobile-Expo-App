@@ -20,6 +20,31 @@ export const DEFAULT_IOSIX_MAC = "E0:E2:E6:18:ED:B2";
 const ELD_MAC_KEY = "@pingpoint_truck_eld_mac";
 let configuredEldMac = DEFAULT_IOSIX_MAC;
 
+// iOS: Core Bluetooth never exposes MAC addresses — device.id is a per-device
+// random UUID Apple assigns to the peripheral, so the MAC-based matching above
+// cannot work there. Instead we match by advertised service UUID (and, as a
+// TODO-verify fallback, by local name), then persist the UUID iOS handed us so
+// later sessions can match the exact peripheral directly.
+// TODO(iOS/device): confirm on a real iPhone + dongle that the IOSiX
+// advertisement actually carries IOSIX_SERVICE_UUID (the Android unfiltered-
+// scan safety net exists because this was never certain) and capture its
+// advertised local name; until then IOS_ELD_NAME_HINT is a guess.
+const IOS_ELD_UUID_KEY = "@pingpoint_truck_eld_ios_uuid";
+const IOS_ELD_NAME_HINT = "iosix";
+let knownIosEldUuid: string | null = null;
+
+async function loadIosEldUuid(): Promise<void> {
+  try {
+    const stored = await AsyncStorage.getItem(IOS_ELD_UUID_KEY);
+    if (stored && stored.trim()) knownIosEldUuid = stored.trim();
+  } catch {}
+}
+
+function rememberIosEldUuid(uuid: string): void {
+  knownIosEldUuid = uuid;
+  void AsyncStorage.setItem(IOS_ELD_UUID_KEY, uuid).catch(() => {});
+}
+
 export function getEldMac(): string {
   return configuredEldMac;
 }
@@ -241,6 +266,7 @@ class IOSiXService {
     this.reconnectAttempts = 0;
 
     await loadEldMac();
+    if (Platform.OS === "ios") await loadIosEldUuid();
     await this.loadRawLogFromStorage();
     this.startRawLogTimers();
     this.appStateSub = AppState.addEventListener("change", this.handleAppStateChange);
@@ -253,7 +279,26 @@ class IOSiXService {
         this.started = false;
         return;
       }
-      this.manager = new BleManager();
+      // iOS: opt into Core Bluetooth state restoration. If iOS terminates the
+      // app while a peripheral connection (or pending connect) exists, a BLE
+      // event relaunches the app in the background and hands the restored
+      // peripherals to this callback. That relaunch path only re-establishes
+      // the native BLE session — JS must restart the pipeline, which start()
+      // does when DriverProvider mounts in the relaunched app.
+      // TODO(iOS/device): verify relaunch-on-BLE-event end to end on a real
+      // device (Xcode console, app force-backgrounded then killed by memory
+      // pressure — NOT swipe-killed; iOS never restores swipe-killed apps).
+      this.manager =
+        Platform.OS === "ios"
+          ? new BleManager({
+              restoreStateIdentifier: "pingpoint-iosix-ble",
+              restoreStateFunction: () => {
+                // Connection recovery is handled by the normal scan/connect
+                // loop once start() runs; nothing to do with the restored
+                // peripheral list itself.
+              },
+            })
+          : new BleManager();
       this.waitForPoweredOnThenScan();
     } catch (e) {
       this.update({ status: "error", error: this.errMsg(e) });
@@ -346,8 +391,8 @@ class IOSiXService {
         return;
       }
       if (!scanned) return;
-      const id = (scanned.id || "").toUpperCase();
-      if (id !== getEldMac().toUpperCase()) return;
+      if (!this.isTargetDevice(scanned)) return;
+      if (Platform.OS === "ios") rememberIosEldUuid(scanned.id);
       try {
         this.manager?.stopDeviceScan();
       } catch {}
@@ -360,50 +405,126 @@ class IOSiXService {
     });
   }
 
+  // Android identifies the dongle by MAC (device.id IS the MAC there). iOS
+  // hides MACs, so match: (1) the peripheral UUID we saw in a previous
+  // session, else (2) the IOSiX service UUID in the advertisement, else
+  // (3) a local-name hint (see IOS_ELD_NAME_HINT TODO). First iOS match wins
+  // and its UUID is persisted by the scan callback for future sessions.
+  private isTargetDevice(scanned: Device): boolean {
+    const id = (scanned.id || "").toUpperCase();
+    if (Platform.OS !== "ios") {
+      return id === getEldMac().toUpperCase();
+    }
+    if (knownIosEldUuid) return id === knownIosEldUuid.toUpperCase();
+    const advertised = (scanned.serviceUUIDs || []).map((u) => u.toLowerCase());
+    if (advertised.includes(IOSIX_SERVICE_UUID.toLowerCase())) return true;
+    const name = (scanned.localName || scanned.name || "").toLowerCase();
+    return name.includes(IOS_ELD_NAME_HINT);
+  }
+
   private async connectTo(dev: Device): Promise<void> {
     if (!this.manager || !this.started) return;
     this.update({ status: "connecting", error: null, lastRssi: dev.rssi ?? null });
     try {
       const connected = await dev.connect({ autoConnect: false });
-      await connected.discoverAllServicesAndCharacteristics();
-      this.device = connected;
-
-      this.disconnectSub = connected.onDisconnected(() => {
-        this.device = null;
-        try {
-          this.monitorSub?.remove();
-        } catch {}
-        this.monitorSub = null;
-        if (this.started) this.scheduleReconnect("disconnected");
-      });
-
-      this.monitorSub = connected.monitorCharacteristicForService(
-        IOSIX_SERVICE_UUID,
-        IOSIX_CHAR_UUID,
-        (err, char) => {
-          if (err) {
-            this.scheduleReconnect(this.errMsg(err));
-            return;
-          }
-          if (!char?.value) return;
-          // Keep the original base64 for raw-log upload — the server-side
-          // reassembly expects the unmodified BLE notify bytes.
-          this.appendRawLog(char.value);
-          try {
-            const raw = base64ToAscii(char.value);
-            // First byte of every BLE notify is a 1-byte sequence counter
-            // (server strips identically in ingestIosixPingsFromRaw).
-            const stripped = raw.length > 0 ? raw.slice(1) : raw;
-            this.ingestFrame(stripped);
-          } catch {}
-        }
-      );
-      this.reconnectAttempts = 0;
-      this.update({ status: "connected", error: null });
-      this.ensureForegroundService();
+      await this.attachConnectedDevice(connected);
     } catch (e) {
       this.scheduleReconnect(this.errMsg(e));
     }
+  }
+
+  // Post-connect setup shared by the scan->connect path (both platforms) and
+  // the iOS pending-connect path. Throws on failure; callers route the error
+  // into scheduleReconnect.
+  private async attachConnectedDevice(connected: Device): Promise<void> {
+    await connected.discoverAllServicesAndCharacteristics();
+    this.device = connected;
+
+    this.disconnectSub = connected.onDisconnected(() => {
+      this.device = null;
+      try {
+        this.monitorSub?.remove();
+      } catch {}
+      this.monitorSub = null;
+      if (this.started) this.scheduleReconnect("disconnected");
+    });
+
+    this.monitorSub = connected.monitorCharacteristicForService(
+      IOSIX_SERVICE_UUID,
+      IOSIX_CHAR_UUID,
+      (err, char) => {
+        if (err) {
+          this.scheduleReconnect(this.errMsg(err));
+          return;
+        }
+        if (!char?.value) return;
+        // Keep the original base64 for raw-log upload — the server-side
+        // reassembly expects the unmodified BLE notify bytes.
+        this.appendRawLog(char.value);
+        // iOS has no native 5s tick (the foreground-service module is
+        // Android-only) and JS timers freeze in background there too. But
+        // every BLE notification wakes the app for a few seconds, so this
+        // 1 Hz callback IS the background heartbeat: onNativeTick() is
+        // self-throttled by the per-timer deadlines, so calling it per
+        // notification keeps the upload/flush cadence without extra work in
+        // the foreground.
+        if (Platform.OS === "ios") this.onNativeTick();
+        try {
+          const raw = base64ToAscii(char.value);
+          // First byte of every BLE notify is a 1-byte sequence counter
+          // (server strips identically in ingestIosixPingsFromRaw).
+          const stripped = raw.length > 0 ? raw.slice(1) : raw;
+          this.ingestFrame(stripped);
+        } catch {}
+      }
+    );
+    this.reconnectAttempts = 0;
+    this.update({ status: "connected", error: null });
+    this.ensureForegroundService();
+  }
+
+  // iOS-only reconnect mechanism. In the background JS timers freeze, and an
+  // unfiltered scan returns nothing at all — so the timer-driven scan loop
+  // cannot re-find the dongle until the app is foregrounded. Core Bluetooth's
+  // answer is a connect request with no timeout: it stays pending natively
+  // (survives screen-off, and with state restoration even app termination)
+  // and completes the moment the peripheral reappears. Armed from
+  // scheduleReconnect using the peripheral UUID persisted on first contact.
+  // TODO(iOS/device): verify on hardware that a pending connect issued during
+  // the ~10s of runtime after onDisconnected survives suspension and
+  // completes when the truck/dongle powers back up.
+  private iosPendingConnect = false;
+  private iosEnsurePendingConnect(): void {
+    if (Platform.OS !== "ios" || this.iosPendingConnect) return;
+    if (!this.started || !this.manager || this.device) return;
+    const uuid = knownIosEldUuid;
+    if (!uuid) return;
+    this.iosPendingConnect = true;
+    this.manager
+      .connectToDevice(uuid) // no timeout: pending until the dongle reappears
+      .then(async (connected) => {
+        this.iosPendingConnect = false;
+        if (!this.started || this.device) {
+          try {
+            await connected.cancelConnection();
+          } catch {}
+          return;
+        }
+        this.clearTimers();
+        try {
+          this.manager?.stopDeviceScan();
+        } catch {}
+        try {
+          await this.attachConnectedDevice(connected);
+        } catch (e) {
+          this.scheduleReconnect(this.errMsg(e));
+        }
+      })
+      .catch(() => {
+        // Unknown UUID / Bluetooth off / cancelled — the scan path stays the
+        // fallback; next scheduleReconnect re-arms this.
+        this.iosPendingConnect = false;
+      });
   }
 
   // Start the connectedDevice foreground service once we actually talk to a
@@ -455,6 +576,10 @@ class IOSiXService {
       this.reconnectDueAt = null;
       if (this.started) this.startScan();
     }, delay);
+    // The timer above only fires while JS is running (foreground, or Android
+    // background under the FGS tick). On iOS the pending connect is what
+    // actually recovers the link in background — arm it alongside.
+    this.iosEnsurePendingConnect();
   }
 
   // Driven by the native 5s tick (see field comments). Each branch acts only

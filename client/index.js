@@ -3,17 +3,23 @@ import messaging from "@react-native-firebase/messaging";
 import BackgroundGeolocation from "react-native-background-geolocation";
 
 import App from "@/App";
-import { handleFcmDataMessage } from "@/lib/fcm";
+import { handleFcmDataMessage, FCM_SUPPORTED } from "@/lib/fcm";
 import { notifyStopEvent } from "@/lib/notifications";
 
 // Background message handler MUST be registered at module load time —
 // before the React tree mounts — so the headless JS instance Android
 // spawns for a data-only push can find it. Foreground handler lives
 // inside DriverContext (where it has access to driver state).
-messaging().setBackgroundMessageHandler(async (message) => {
-  console.log("[FCM][bg] message received");
-  await handleFcmDataMessage(message, "fcm_bg");
-});
+// iOS: skipped — messaging() throws at startup while GoogleService-Info.plist
+// is a placeholder (see FCM_SUPPORTED). There is no Android-style headless JS
+// on iOS anyway; background pushes re-launch the full app via
+// `content-available` and land in the same handler set once FCM is enabled.
+if (FCM_SUPPORTED) {
+  messaging().setBackgroundMessageHandler(async (message) => {
+    console.log("[FCM][bg] message received");
+    await handleFcmDataMessage(message, "fcm_bg");
+  });
+}
 
 // Headless task — runs when Android has terminated the app but the SDK keeps
 // tracking (stopOnTerminate:false, enableHeadless:true). The config enabled
