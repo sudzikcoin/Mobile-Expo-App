@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
-import { View, StyleSheet, ScrollView, RefreshControl, Platform, Pressable } from "react-native";
+import { View, StyleSheet, ScrollView, RefreshControl, Platform, Pressable, Linking, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -13,6 +13,7 @@ import RewardAnimation from "@/components/RewardAnimation";
 import TrackingDiagnostics from "@/components/TrackingDiagnostics";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { isStopCurrent } from "@/lib/mock-data";
+import { buildTruckerPathLoadLink } from "@/lib/truckerpath";
 import { useDriver } from "@/lib/driver-context";
 import { maskToken } from "@/lib/storage";
 import { useAppTheme } from "@/lib/theme-context";
@@ -109,6 +110,25 @@ export default function DashboardScreen() {
   const handleRewardComplete = () => {
     setShowReward(false);
     setRewardPoints(0);
+  };
+
+  // Hidden when there's no load or nothing left to drive; disabled (never
+  // hidden) if a remaining stop lacks coordinates so the miss is visible.
+  const tpLink = load ? buildTruckerPathLoadLink(load) : { state: "no-remaining" as const };
+
+  const handleOpenTruckerPath = async () => {
+    if (tpLink.state !== "ready") return;
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    try {
+      // Direct openURL, no canOpenURL gate — canOpenURL lies unless the
+      // scheme is declared (LSApplicationQueriesSchemes / <queries>), openURL
+      // itself works regardless. Same lesson as the NAV WebView handoff.
+      await Linking.openURL(tpLink.url);
+    } catch {
+      Alert.alert("Trucker Path app not installed");
+    }
   };
 
   const getTimeSinceLastPing = (): string => {
@@ -257,6 +277,43 @@ export default function DashboardScreen() {
                 ))}
               </View>
             </View>
+
+            {tpLink.state !== "no-remaining" ? (
+              <View>
+                <Pressable
+                  onPress={handleOpenTruckerPath}
+                  disabled={tpLink.state !== "ready"}
+                  style={({ pressed }) => [
+                    styles.tpButton,
+                    {
+                      borderColor: isArcade ? PingPointColors.cyan : "rgba(0, 217, 255, 0.5)",
+                      borderRadius: colors.borderRadius,
+                    },
+                    tpLink.state !== "ready" && styles.tpButtonDisabled,
+                    pressed && styles.tpButtonPressed,
+                  ]}
+                >
+                  <Feather
+                    name="truck"
+                    size={20}
+                    color={tpLink.state === "ready" ? PingPointColors.cyan : PingPointColors.textMuted}
+                  />
+                  <ThemedText
+                    style={[
+                      styles.tpButtonText,
+                      tpLink.state !== "ready" && { color: PingPointColors.textMuted },
+                    ]}
+                  >
+                    OPEN ROUTE IN TRUCKER PATH
+                  </ThemedText>
+                </Pressable>
+                {tpLink.state === "missing-coords" ? (
+                  <ThemedText style={[styles.tpNote, { color: colors.textMuted }]}>
+                    Stop coordinates unavailable — ask dispatch to update the load.
+                  </ThemedText>
+                ) : null}
+              </View>
+            ) : null}
           </>
         ) : (
           <View style={styles.noLoadContainer}>
@@ -369,6 +426,36 @@ const styles = StyleSheet.create({
   },
   stopsList: {
     gap: Spacing.md,
+  },
+  // In-cab standard: full-width, ≥56px target, cyan-outline family (matches
+  // the ELD/GPS pills; NAV uses the same treatment for its primary CTAs).
+  tpButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    minHeight: 56,
+    paddingHorizontal: Spacing.lg,
+    backgroundColor: "rgba(0, 217, 255, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 217, 255, 0.5)",
+  },
+  tpButtonPressed: {
+    backgroundColor: "rgba(0, 217, 255, 0.25)",
+  },
+  tpButtonDisabled: {
+    opacity: 0.45,
+  },
+  tpButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: 1,
+    color: PingPointColors.cyan,
+  },
+  tpNote: {
+    ...Typography.caption,
+    marginTop: Spacing.xs,
+    textAlign: "center",
   },
   noLoadContainer: {
     flex: 1,
