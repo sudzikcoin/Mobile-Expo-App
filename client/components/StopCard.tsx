@@ -6,8 +6,9 @@ import * as Haptics from "expo-haptics";
 import { ThemedText } from "@/components/ThemedText";
 import { PingPointColors, Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { Stop } from "@/lib/types";
-import { formatDateTime, getStopActionLabel, isStopCompleted } from "@/lib/mock-data";
+import { formatDateTime, isStopCompleted } from "@/lib/mock-data";
 import { useAppTheme } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 interface StopCardProps {
   stop: Stop;
@@ -25,8 +26,14 @@ function formatTimeShort(isoString: string): string {
 
 function StopCard({ stop, isCurrent, onAction, isLoading }: StopCardProps) {
   const { colors, isArcade } = useAppTheme();
+  const { t } = useI18n();
   const completed = isStopCompleted(stop);
-  const actionLabel = getStopActionLabel(stop);
+  const actionLabel =
+    stop.status === "PENDING"
+      ? t("stop.arriveBtn")
+      : stop.status === "ARRIVED"
+        ? t("stop.departBtn")
+        : null;
   // Collapsed by default: completed stops render as a slim history row and
   // the address clamps to 2 lines. Tap anywhere on the card body to expand.
   const [expanded, setExpanded] = useState(false);
@@ -109,7 +116,7 @@ function StopCard({ stop, isCurrent, onAction, isLoading }: StopCardProps) {
               stop.type === "DELIVERY" && styles.typeBadgeDelivery,
             ]}
           >
-            <ThemedText style={styles.typeText}>{stop.type}</ThemedText>
+            <ThemedText style={styles.typeText}>{stop.type === "PICKUP" ? t("stop.pickup") : t("stop.delivery")}</ThemedText>
           </View>
           <ThemedText style={[styles.companyName, completed && styles.textCompleted]} numberOfLines={expanded ? undefined : 1}>
             {stop.companyName}
@@ -144,8 +151,8 @@ function StopCard({ stop, isCurrent, onAction, isLoading }: StopCardProps) {
 
         {completed && stop.arrivedAt && (
           <ThemedText style={styles.completedTimeText}>
-            Arrived {formatTimeShort(stop.arrivedAt)}
-            {stop.departedAt ? ` · Departed ${formatTimeShort(stop.departedAt)}` : ""}
+            {t("stop.arrived")} {formatTimeShort(stop.arrivedAt)}
+            {stop.departedAt ? ` · ${t("stop.departed")} ${formatTimeShort(stop.departedAt)}` : ""}
           </ThemedText>
         )}
       </Pressable>

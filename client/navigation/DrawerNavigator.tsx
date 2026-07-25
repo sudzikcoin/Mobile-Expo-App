@@ -2,40 +2,146 @@ import React from "react";
 import {
   createDrawerNavigator,
   DrawerContentScrollView,
-  DrawerItemList,
   DrawerContentComponentProps,
 } from "@react-navigation/drawer";
-import { View, StyleSheet, Pressable } from "react-native";
+import { View, StyleSheet, Pressable, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 
 import DashboardScreen from "@/screens/DashboardScreen";
 import HistoryScreen from "@/screens/HistoryScreen";
+import HistoryDetailScreen from "@/screens/HistoryDetailScreen";
 import LogsScreen from "@/screens/LogsScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
 import LoadDetailsScreen from "@/screens/LoadDetailsScreen";
 import TrackingStatusScreen from "@/screens/TrackingStatusScreen";
 import NavScreen from "@/screens/NavScreen";
-import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
+import StatusScreen from "@/screens/StatusScreen";
+import LegalScreen from "@/screens/LegalScreen";
+import { PingPointColors, Spacing, BorderRadius } from "@/constants/theme";
 import { ThemedText } from "@/components/ThemedText";
 import { useAppTheme } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
+import type { Load } from "@/lib/types";
 
 export type DrawerParamList = {
   Dashboard: { token?: string } | undefined;
   // loadId опционален — если не передан, экран возьмёт id текущего активного груза из driver-context
   LoadDetails: { loadId?: string } | undefined;
   History: undefined;
+  // Detail view for a delivered load; fed from the already-fetched history
+  // payload (no extra fetch).
+  HistoryDetail: { load: Load };
   Logs: undefined;
   Settings: undefined;
   TrackingStatus: undefined;
   Nav: undefined;
+  Status: undefined;
+  Legal: { url: string; title: string };
 };
 
 const Drawer = createDrawerNavigator<DrawerParamList>();
 
+// The five menu entries, in order. Per-item neon accent from the arcade
+// palette (same colors the status pills use); everything else registered on
+// the navigator stays reachable by navigation but is NOT listed here —
+// Logs and TrackingStatus moved behind the Settings service door in 1.8.6,
+// LoadDetails/HistoryDetail/Legal are detail views, not destinations.
+const MENU_ITEMS: Array<{
+  route: keyof DrawerParamList;
+  labelKey: string;
+  icon: keyof typeof Feather.glyphMap;
+  accent: string;
+}> = [
+  { route: "Dashboard", labelKey: "menu.dashboard", icon: "home", accent: PingPointColors.cyan },
+  { route: "History", labelKey: "menu.history", icon: "clock", accent: PingPointColors.yellow },
+  { route: "Status", labelKey: "menu.status", icon: "activity", accent: "#00ff88" },
+  { route: "Nav", labelKey: "menu.nav", icon: "truck", accent: PingPointColors.magenta },
+  { route: "Settings", labelKey: "menu.settings", icon: "settings", accent: PingPointColors.purple },
+];
+
+function DrawerItem({
+  label,
+  icon,
+  accent,
+  active,
+  onPress,
+}: {
+  label: string;
+  icon: keyof typeof Feather.glyphMap;
+  accent: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const { isArcade, colors } = useAppTheme();
+
+  const handlePress = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    onPress();
+  };
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [
+        styles.item,
+        {
+          borderRadius: BorderRadius.md,
+          borderColor: active ? accent : "transparent",
+          backgroundColor: active ? `${accent}26` : "transparent",
+        },
+        // Active item glows like the ARCADE 90s card in Settings.
+        active &&
+          isArcade && {
+            shadowColor: accent,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.55,
+            shadowRadius: 10,
+            elevation: 8,
+          },
+        pressed && { opacity: 0.75 },
+      ]}
+    >
+      <View
+        style={[
+          styles.itemIcon,
+          {
+            backgroundColor: `${accent}1f`,
+          },
+          active &&
+            isArcade && {
+              shadowColor: accent,
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 0.7,
+              shadowRadius: 6,
+              elevation: 4,
+            },
+        ]}
+      >
+        <Feather name={icon} size={22} color={accent} />
+      </View>
+      <ThemedText
+        style={[
+          styles.itemLabel,
+          { color: active ? accent : colors.textSecondary },
+        ]}
+        numberOfLines={1}
+      >
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
 function CustomDrawerContent(props: DrawerContentComponentProps) {
   const insets = useSafeAreaInsets();
   const { appTheme } = useAppTheme();
+  const { t } = useI18n();
+
+  const activeRoute = props.state.routes[props.state.index]?.name;
 
   return (
     <DrawerContentScrollView
@@ -54,15 +160,21 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
           </ThemedText>
         </View>
       </View>
-      <DrawerItemList {...props} />
+      {MENU_ITEMS.map((item) => (
+        <DrawerItem
+          key={item.route}
+          label={t(item.labelKey)}
+          icon={item.icon}
+          accent={item.accent}
+          active={activeRoute === item.route}
+          onPress={() => props.navigation.navigate(item.route as never)}
+        />
+      ))}
     </DrawerContentScrollView>
   );
 }
 
 export default function DrawerNavigator() {
-  const { appTheme } = useAppTheme();
-  const isArcade = appTheme === "arcade";
-
   return (
     <Drawer.Navigator
       initialRouteName="Dashboard"
@@ -73,101 +185,36 @@ export default function DrawerNavigator() {
         headerShown: false,
         drawerStyle: {
           backgroundColor: PingPointColors.surface,
-          width: 280,
-        },
-        drawerActiveTintColor: PingPointColors.cyan,
-        drawerInactiveTintColor: PingPointColors.textSecondary,
-        drawerActiveBackgroundColor: isArcade
-          ? "rgba(0, 217, 255, 0.15)"
-          : "rgba(0, 217, 255, 0.1)",
-        drawerItemStyle: {
-          borderRadius: BorderRadius.sm,
-          marginHorizontal: Spacing.sm,
-          marginVertical: Spacing.xs,
-        },
-        drawerLabelStyle: {
-          ...Typography.body,
-          fontWeight: "600",
-          marginLeft: -Spacing.lg,
+          width: 300,
         },
       }}
     >
-      <Drawer.Screen
-        name="Dashboard"
-        component={DashboardScreen}
-        options={{
-          drawerLabel: "Dashboard",
-          drawerIcon: ({ color, size }) => (
-            <Feather name="home" size={size} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="History"
-        component={HistoryScreen}
-        options={{
-          drawerLabel: "History",
-          drawerIcon: ({ color, size }) => (
-            <Feather name="clock" size={size} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="Logs"
-        component={LogsScreen}
-        options={{
-          drawerLabel: "Logs",
-          drawerIcon: ({ color, size }) => (
-            <Feather name="file-text" size={size} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="TrackingStatus"
-        component={TrackingStatusScreen}
-        options={{
-          drawerLabel: "Tracking Status",
-          drawerIcon: ({ color, size }) => (
-            <Feather name="navigation" size={size} color={color} />
-          ),
-        }}
-      />
+      <Drawer.Screen name="Dashboard" component={DashboardScreen} />
+      <Drawer.Screen name="History" component={HistoryScreen} />
+      <Drawer.Screen name="HistoryDetail" component={HistoryDetailScreen} />
+      <Drawer.Screen name="Status" component={StatusScreen} />
       <Drawer.Screen
         name="Nav"
         component={NavScreen}
         options={{
-          drawerLabel: "PingPoint NAV",
-          drawerIcon: ({ color, size }) => (
-            <Feather name="truck" size={size} color={color} />
-          ),
           // NAV state (parsed RC, built route) lives in the WebView — the
           // drawer keeps visited screens mounted, and freeze is off so the
           // WebView keeps its session while the user is elsewhere in the app.
           freezeOnBlur: false,
         }}
       />
-      <Drawer.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{
-          drawerLabel: "Settings",
-          drawerIcon: ({ color, size }) => (
-            <Feather name="settings" size={size} color={color} />
-          ),
-        }}
-      />
+      <Drawer.Screen name="Settings" component={SettingsScreen} />
+      <Drawer.Screen name="Legal" component={LegalScreen} />
+      {/* Not in the menu: LoadDetails is the commercial load view (opened
+          from dispatch deep links /loads/:loadId); Logs and TrackingStatus
+          are service-door screens reached from Settings → Advanced. */}
       <Drawer.Screen
         name="LoadDetails"
         component={LoadDetailsScreen}
-        options={{
-          drawerLabel: "Load",
-          drawerIcon: ({ color, size }) => (
-            <Feather name="package" size={size} color={color} />
-          ),
-          headerShown: false,
-          swipeEnabled: true,
-        }}
+        options={{ swipeEnabled: true }}
       />
+      <Drawer.Screen name="Logs" component={LogsScreen} />
+      <Drawer.Screen name="TrackingStatus" component={TrackingStatusScreen} />
     </Drawer.Navigator>
   );
 }
@@ -175,9 +222,10 @@ export default function DrawerNavigator() {
 const styles = StyleSheet.create({
   drawerContent: {
     flex: 1,
+    paddingHorizontal: Spacing.md,
   },
   drawerHeader: {
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing["2xl"],
     borderBottomWidth: 1,
     borderBottomColor: PingPointColors.border,
@@ -207,7 +255,32 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   themeBadgeText: {
-    ...Typography.badge,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.5,
     color: PingPointColors.cyan,
+  },
+  // In-cab standard: ≥56px target, 17px label, clear icon/label separation.
+  item: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 60,
+    paddingHorizontal: Spacing.md,
+    marginVertical: Spacing.xs,
+    borderWidth: 1,
+    gap: Spacing.lg,
+  },
+  itemIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: BorderRadius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  itemLabel: {
+    fontSize: 17,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    flex: 1,
   },
 });

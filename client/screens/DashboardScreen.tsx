@@ -20,6 +20,7 @@ import { buildSimpleGoogleLink, fetchGoogleTruckRoute } from "@/lib/navroute";
 import { useDriver } from "@/lib/driver-context";
 import { maskToken } from "@/lib/storage";
 import { useAppTheme } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 import type { DrawerParamList } from "@/navigation/DrawerNavigator";
 
 type DashboardRouteProp = RouteProp<DrawerParamList, "Dashboard">;
@@ -28,6 +29,7 @@ export default function DashboardScreen() {
   const route = useRoute<DashboardRouteProp>();
   const insets = useSafeAreaInsets();
   const { colors, isArcade } = useAppTheme();
+  const { t } = useI18n();
 
   const {
     token,
@@ -120,7 +122,7 @@ export default function DashboardScreen() {
       // itself works regardless. Same lesson as the NAV WebView handoff.
       await Linking.openURL(tpLink.url);
     } catch {
-      Alert.alert("Trucker Path app not installed");
+      Alert.alert(t("dash.tpNotInstalled"));
     }
   };
 
@@ -132,19 +134,16 @@ export default function DashboardScreen() {
   const offerSimpleGoogleFallback = () => {
     const simpleUrl = load ? buildSimpleGoogleLink(load) : null;
     if (!simpleUrl) {
-      Alert.alert(
-        "Route engine unavailable",
-        "Couldn't build the truck-safe route. Try again in a minute.",
-      );
+      Alert.alert(t("dash.routeEngineTitle"), t("dash.routeEngineRetry"));
       return;
     }
     Alert.alert(
-      "Route engine unavailable",
-      "Couldn't build the truck-safe route. Open a plain Google Maps route to your stops instead? It will NOT account for truck restrictions — watch for low bridges and weight limits yourself.",
+      t("dash.routeEngineTitle"),
+      t("dash.routeEngineFallback"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("dash.cancel"), style: "cancel" },
         {
-          text: "Open anyway",
+          text: t("dash.openAnyway"),
           onPress: () => {
             Linking.openURL(simpleUrl).catch(() => {});
           },
@@ -181,7 +180,7 @@ export default function DashboardScreen() {
       try {
         await Linking.openURL(result.url);
       } catch {
-        Alert.alert("Couldn't open Google Maps");
+        Alert.alert(t("dash.gmapsCantOpen"));
       }
     } catch {
       offerSimpleGoogleFallback();
@@ -193,9 +192,9 @@ export default function DashboardScreen() {
   const getTimeSinceLastPing = (): string => {
     if (!lastPingTime) return "";
     const seconds = Math.floor((Date.now() - lastPingTime.getTime()) / 1000);
-    if (seconds < 60) return `${seconds}s ago`;
+    if (seconds < 60) return t("time.sAgo", { n: seconds });
     const minutes = Math.floor(seconds / 60);
-    return `${minutes}m ago`;
+    return t("time.mAgo", { n: minutes });
   };
 
   if (!token || (isLoading && !load)) {
@@ -203,7 +202,7 @@ export default function DashboardScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <DashboardHeader balance={balance} />
         <View style={styles.loadingContainer}>
-          <ThemedText style={[styles.loadingText, { color: colors.textSecondary }]}>Loading your assignment...</ThemedText>
+          <ThemedText style={[styles.loadingText, { color: colors.textSecondary }]}>{t("dash.loading")}</ThemedText>
         </View>
       </View>
     );
@@ -218,7 +217,7 @@ export default function DashboardScreen() {
           <Feather name="alert-circle" size={16} color={PingPointColors.yellow} />
           <ThemedText style={styles.errorText}>{error}</ThemedText>
           <Pressable onPress={onRefresh} style={styles.retryButton}>
-            <ThemedText style={styles.retryText}>Retry</ThemedText>
+            <ThemedText style={styles.retryText}>{t("dash.retry")}</ThemedText>
           </Pressable>
         </View>
       ) : null}
@@ -261,11 +260,11 @@ export default function DashboardScreen() {
               ]}>
                 <View style={styles.gpsStatusRow}>
                   <View style={[styles.gpsDot, { backgroundColor: isArcade ? "#00ff88" : "#ffffff" }]} />
-                  <ThemedText style={[styles.gpsStatusText, { color: isArcade ? PingPointColors.cyan : "#ffffff" }]}>GPS Active</ThemedText>
+                  <ThemedText style={[styles.gpsStatusText, { color: isArcade ? PingPointColors.cyan : "#ffffff" }]}>{t("dash.gpsActive")}</ThemedText>
                 </View>
                 {lastPingTime ? (
                   <ThemedText style={[styles.gpsLastUpdate, { color: colors.textSecondary }]}>
-                    Last update: {getTimeSinceLastPing()}
+                    {t("dash.lastUpdate", { time: getTimeSinceLastPing() })}
                   </ThemedText>
                 ) : null}
               </View>
@@ -276,7 +275,7 @@ export default function DashboardScreen() {
             <EldStatusPill />
 
             <View style={styles.stopsSection}>
-              <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>STOPS</ThemedText>
+              <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>{t("dash.stops")}</ThemedText>
               <View style={styles.stopsList}>
                 {load.stops.map((stop) => (
                   <StopCard
@@ -316,12 +315,12 @@ export default function DashboardScreen() {
                       tpLink.state !== "ready" && { color: PingPointColors.textMuted },
                     ]}
                   >
-                    OPEN ROUTE IN TRUCKER PATH
+                    {t("dash.openTp")}
                   </ThemedText>
                 </Pressable>
                 {tpLink.state === "missing-coords" ? (
                   <ThemedText style={[styles.tpNote, { color: colors.textMuted }]}>
-                    Stop coordinates unavailable — ask dispatch to update the load.
+                    {t("dash.stopCoordsMissing")}
                   </ThemedText>
                 ) : null}
 
@@ -350,7 +349,7 @@ export default function DashboardScreen() {
                       tpLink.state !== "ready" && { color: PingPointColors.textMuted },
                     ]}
                   >
-                    {gmapsBuilding ? "BUILDING ROUTE…" : "OPEN IN GOOGLE MAPS"}
+                    {gmapsBuilding ? t("dash.buildingRoute") : t("dash.openGmaps")}
                   </ThemedText>
                 </Pressable>
               </View>
@@ -358,9 +357,9 @@ export default function DashboardScreen() {
           </>
         ) : (
           <View style={styles.noLoadContainer}>
-            <ThemedText style={styles.noLoadTitle}>No Active Load</ThemedText>
+            <ThemedText style={styles.noLoadTitle}>{t("dash.noLoadTitle")}</ThemedText>
             <ThemedText style={styles.noLoadText}>
-              Pull down to refresh when you have a new assignment.
+              {t("dash.noLoadText")}
             </ThemedText>
           </View>
         )}

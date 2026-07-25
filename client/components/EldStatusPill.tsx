@@ -5,7 +5,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useIOSiXTelemetry } from "@/lib/iosix/hook";
 import { useAppTheme } from "@/lib/theme-context";
-import { kphToMph } from "@/lib/units";
+import { useUnits } from "@/lib/units-context";
+import { useI18n } from "@/lib/i18n";
 
 // Owns the telemetry subscription so BLE ticks (~1s with the ELD streaming)
 // re-render only this pill, not the whole Dashboard tree. Moving the hook
@@ -13,18 +14,21 @@ import { kphToMph } from "@/lib/units";
 // keep it here.
 export default function EldStatusPill() {
   const { colors, isArcade } = useAppTheme();
+  const { formatSpeedKph } = useUnits();
+  const { t } = useI18n();
   const iosix = useIOSiXTelemetry(true);
 
   // Pill speed: ECU road speed (f3) when present and sane, else GPS ground
-  // speed (f13). Integer mph; null hides the segment entirely.
+  // speed (f13). Formatted per the Settings units preference; null hides
+  // the segment entirely.
   const pillSpeedKph =
     iosix.telemetry.ecuSpeedKph !== null &&
     iosix.telemetry.ecuSpeedKph >= 0 &&
     iosix.telemetry.ecuSpeedKph <= 200
       ? iosix.telemetry.ecuSpeedKph
       : iosix.telemetry.gpsSpeedKph;
-  const pillSpeedMph =
-    pillSpeedKph !== null ? Math.round(kphToMph(pillSpeedKph)) : null;
+  const pillSpeedText =
+    pillSpeedKph !== null ? formatSpeedKph(pillSpeedKph) : null;
 
   return (
     <View
@@ -67,13 +71,13 @@ export default function EldStatusPill() {
             // stale/zero reading — show ENGINE OFF instead; voltage
             // stays live on battery power.
             ? iosix.telemetry.ignition === false
-              ? `ELD · ENGINE OFF${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}`
-              : `ELD${iosix.telemetry.rpm !== null ? ` · ${Math.round(iosix.telemetry.rpm)} RPM` : ""}${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}${pillSpeedMph !== null ? ` · ${pillSpeedMph} mph` : ""}`
+              ? `ELD · ${t("eld.engineOff")}${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}`
+              : `ELD${iosix.telemetry.rpm !== null ? ` · ${Math.round(iosix.telemetry.rpm)} RPM` : ""}${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}${pillSpeedText !== null ? ` · ${pillSpeedText}` : ""}`
             : iosix.scanning
-            ? "Scanning for ELD..."
+            ? t("eld.scanning")
             : iosix.error === "ble_permission_denied"
-            ? "ELD: Bluetooth permission denied"
-            : "ELD Not Connected"}
+            ? t("eld.blePermission")
+            : t("eld.notConnected")}
         </ThemedText>
       </View>
     </View>

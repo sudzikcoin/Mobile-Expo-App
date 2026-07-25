@@ -12,9 +12,13 @@ import { useAppTheme } from "@/lib/theme-context";
 interface ScreenHeaderProps {
   title: string;
   showBack?: boolean;
+  // Optional right-side action (e.g. Logs' share/export button). Falls back
+  // to a width-matched placeholder so the title stays centered.
+  rightIcon?: keyof typeof Feather.glyphMap;
+  onRightPress?: () => void;
 }
 
-export default function ScreenHeader({ title, showBack = true }: ScreenHeaderProps) {
+export default function ScreenHeader({ title, showBack = true, rightIcon, onRightPress }: ScreenHeaderProps) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { colors, isArcade } = useAppTheme();
@@ -40,7 +44,22 @@ export default function ScreenHeader({ title, showBack = true }: ScreenHeaderPro
         <View style={styles.placeholder} />
       )}
       <ThemedText style={[styles.title, { color: colors.textPrimary }]}>{title}</ThemedText>
-      <View style={styles.placeholder} />
+      {rightIcon && onRightPress ? (
+        <Pressable
+          onPress={() => {
+            if (Platform.OS !== "web") {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+            onRightPress();
+          }}
+          style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
+          hitSlop={8}
+        >
+          <Feather name={rightIcon} size={22} color={colors.textPrimary} />
+        </Pressable>
+      ) : (
+        <View style={styles.placeholder} />
+      )}
     </View>
   );
 }

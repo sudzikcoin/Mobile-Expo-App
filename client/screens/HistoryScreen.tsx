@@ -1,101 +1,57 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet, FlatList, RefreshControl } from "react-native";
+import { View, StyleSheet, FlatList, RefreshControl, Pressable, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
+import * as Haptics from "expo-haptics";
 
 import { ThemedText } from "@/components/ThemedText";
 import ScreenHeader from "@/components/ScreenHeader";
 import EmptyState from "@/components/EmptyState";
-import { PingPointColors, Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
+import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { Load, Stop } from "@/lib/types";
-import { getCompletedLoads, getDriverToken } from "@/lib/storage";
-import { MOCK_COMPLETED_LOADS, formatDateTime } from "@/lib/mock-data";
+import { getCompletedLoads, getActiveToken, isTruckToken } from "@/lib/storage";
 import { useAppTheme } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 import emptyHistoryImage from "@/assets/images/empty-history.png";
 
-interface LoadHistoryItemProps {
-  load: Load;
-}
+const API_BASE = "https://pingpoint.suverse.io";
+const PAGE_SIZE = 20;
 
-// Форматирует адрес стопа: предпочитает fullAddress, иначе city + state
-function formatStopAddress(stop?: Stop): string {
+// History rows carry the customer ref for the detail view; the base Load
+// type doesn't have it.
+export type HistoryLoad = Load & { customerRef?: string | null };
+
+// Card line: "CITY, ST" — the compact in-cab form. Detail view shows the
+// full addresses.
+function cityState(stop?: Stop): string {
   if (!stop) return "—";
-  if (stop.fullAddress && stop.fullAddress.trim().length > 0) {
-    return stop.fullAddress;
-  }
   const city = stop.city || "";
   const state = stop.state || "";
   if (city && state) return `${city}, ${state}`;
-  return city || state || "—";
+  return city || state || stop.fullAddress || "—";
 }
 
-function LoadHistoryItem({ load }: LoadHistoryItemProps) {
-  const { colors, isArcade } = useAppTheme();
-
-  // Origin: первый PICKUP стоп
-  const pickupStop = load.stops.find((s) => s.type === "PICKUP");
-  // Destination: последний DELIVERY стоп
-  const deliveryStops = load.stops.filter((s) => s.type === "DELIVERY");
-  const deliveryStop = deliveryStops[deliveryStops.length - 1];
-
-  const originText = formatStopAddress(pickupStop);
-  const destinationText = formatStopAddress(deliveryStop);
-
-  // Дата доставки: load.deliveredAt, либо departedAt последнего стопа
-  const lastStop = load.stops[load.stops.length - 1];
-  const deliveredAt = load.deliveredAt || lastStop?.departedAt;
-
-  return (
-    <View style={[
-      styles.loadCard,
-      {
-        backgroundColor: colors.surface,
-        borderColor: isArcade ? "rgba(0, 217, 255, 0.2)" : colors.border,
-        borderRadius: colors.borderRadius,
-      }
-    ]}>
-      <View style={styles.loadHeader}>
-        <ThemedText style={[styles.loadNumber, { color: isArcade ? PingPointColors.yellow : "#ffffff" }]}>LOAD #{load.loadNumber}</ThemedText>
-        <View style={[styles.deliveredBadge, { backgroundColor: isArcade ? "rgba(0, 217, 255, 0.2)" : "rgba(255, 255, 255, 0.1)" }]}>
-          <ThemedText style={[styles.deliveredText, { color: isArcade ? PingPointColors.cyan : "#ffffff" }]}>DELIVERED</ThemedText>
-        </View>
-      </View>
-
-      <View style={styles.routeRow}>
-        <ThemedText style={[styles.routeText, { color: colors.textPrimary }]} numberOfLines={2}>
-          {originText}
-        </ThemedText>
-        <ThemedText style={[styles.arrow, { color: colors.textSecondary }]}>→</ThemedText>
-        <ThemedText style={[styles.routeText, { color: colors.textPrimary }]} numberOfLines={2}>
-          {destinationText}
-        </ThemedText>
-      </View>
-
-      {deliveredAt ? (
-        <ThemedText style={[styles.deliveredDate, { color: colors.textSecondary }]}>
-          Completed: {formatDateTime(deliveredAt)}
-        </ThemedText>
-      ) : null}
-
-      <View style={[styles.stopsInfo, { borderTopColor: colors.border }]}>
-        <ThemedText style={[styles.stopsInfoText, { color: colors.textMuted }]}>
-          {load.stops.length} stops
-        </ThemedText>
-      </View>
-    </View>
-  );
+function formatDate(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 // Преобразует ответ сервера в структуру Load, используемую приложением.
-// Сервер возвращает стопы с полями { type, fullAddress, city, state, arrivedAt, departedAt, ... }
-function mapServerLoad(raw: any): Load {
+function mapServerLoad(raw: any): HistoryLoad {
   const rawStops: any[] = Array.isArray(raw?.stops) ? raw.stops : [];
   const stops: Stop[] = rawStops.map((s, idx) => ({
     id: String(s.id ?? idx),
     sequence: typeof s.sequence === "number" ? s.sequence : idx + 1,
-    type: (s.type === "DELIVERY" ? "DELIVERY" : "PICKUP"),
-    status: s.status === "ARRIVED" ? "ARRIVED" : s.status === "DEPARTED" ? "DEPARTED" : "PENDING",
-    companyName: s.companyName || s.company || "",
+    type: s.type === "DELIVERY" ? "DELIVERY" : "PICKUP",
+    status: s.departedAt ? "DEPARTED" : s.arrivedAt ? "ARRIVED" : "PENDING",
+    companyName: s.companyName || s.company || s.name || "",
     city: s.city || "",
     state: s.state || "",
     address: s.address || s.fullAddress || "",
@@ -110,62 +66,133 @@ function mapServerLoad(raw: any): Load {
     loadNumber: String(raw.loadNumber ?? ""),
     status: raw.status === "IN_TRANSIT" ? "IN_TRANSIT" : raw.status === "DELIVERED" ? "DELIVERED" : "PLANNED",
     deliveredAt: raw.deliveredAt || undefined,
+    customerRef: raw.customerRef ?? null,
     stops,
   };
 }
 
+function LoadHistoryItem({ load, onPress }: { load: HistoryLoad; onPress: () => void }) {
+  const { colors, isArcade } = useAppTheme();
+  const { t } = useI18n();
+
+  const pickupStop = load.stops.find((s) => s.type === "PICKUP");
+  const deliveryStops = load.stops.filter((s) => s.type === "DELIVERY");
+  const deliveryStop = deliveryStops[deliveryStops.length - 1];
+
+  const lastStop = load.stops[load.stops.length - 1];
+  const deliveredAt = load.deliveredAt || lastStop?.departedAt;
+
+  const handlePress = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    onPress();
+  };
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [
+        styles.loadCard,
+        {
+          backgroundColor: colors.surface,
+          borderColor: isArcade ? "rgba(255, 215, 0, 0.25)" : colors.border,
+          borderRadius: colors.borderRadius,
+        },
+        pressed && { opacity: 0.8 },
+      ]}
+    >
+      <View style={styles.loadHeader}>
+        <ThemedText style={[styles.loadNumber, { color: isArcade ? PingPointColors.yellow : "#ffffff" }]}>
+          LOAD #{load.loadNumber}
+        </ThemedText>
+        <View style={[styles.deliveredBadge, { backgroundColor: isArcade ? "rgba(0, 217, 255, 0.2)" : "rgba(255, 255, 255, 0.1)" }]}>
+          <ThemedText style={[styles.deliveredText, { color: isArcade ? PingPointColors.cyan : "#ffffff" }]}>
+            {t("history.delivered")}
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.routeRow}>
+        <ThemedText style={[styles.routeText, { color: colors.textPrimary }]} numberOfLines={1}>
+          {cityState(pickupStop)}
+        </ThemedText>
+        <ThemedText style={[styles.arrow, { color: colors.textSecondary }]}>→</ThemedText>
+        <ThemedText style={[styles.routeText, styles.routeTextRight, { color: colors.textPrimary }]} numberOfLines={1}>
+          {cityState(deliveryStop)}
+        </ThemedText>
+      </View>
+
+      <View style={styles.metaRow}>
+        <ThemedText style={[styles.metaText, { color: colors.textSecondary }]}>
+          {deliveredAt ? t("history.deliveredOn", { date: formatDate(deliveredAt) }) : ""}
+        </ThemedText>
+        <ThemedText style={[styles.metaText, { color: colors.textMuted }]}>
+          {t("history.stopsCount", { n: load.stops.length })}
+        </ThemedText>
+      </View>
+    </Pressable>
+  );
+}
+
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
-  const { colors, isArcade } = useAppTheme();
-  const [loads, setLoads] = useState<Load[]>([]);
+  const { colors } = useAppTheme();
+  const { t } = useI18n();
+  const navigation = useNavigation<any>();
+  const [loads, setLoads] = useState<HistoryLoad[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Fetch one page of history. Truck tokens use the paginated
+  // /api/truck/:token/history endpoint; legacy drv_* tokens fall back to
+  // the older /api/driver/:token/history (single page, up to 50).
+  const fetchPage = useCallback(async (offset: number): Promise<HistoryLoad[] | null> => {
+    const token = await getActiveToken();
+    if (!token) return null;
+    const url = isTruckToken(token)
+      ? `${API_BASE}/api/truck/${token}/history?limit=${PAGE_SIZE}&offset=${offset}`
+      : `${API_BASE}/api/driver/${token}/history`;
+    try {
+      const res = await fetch(url, {
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+      });
+      if (!res.ok) {
+        console.warn("[History] Server responded with", res.status);
+        return null;
+      }
+      const data = await res.json();
+      if (!Array.isArray(data)) return null;
+      return data.map(mapServerLoad);
+    } catch (err) {
+      console.warn("[History] Server fetch failed:", err);
+      return null;
+    }
+  }, []);
 
   const loadHistory = useCallback(async () => {
     try {
-      // 1) Пытаемся загрузить историю с сервера
-      const token = await getDriverToken();
-      if (token) {
-        try {
-          const url = `https://pingpoint.suverse.io/api/driver/${token}/history`;
-          console.log("[History] Fetching from server:", url);
-          const res = await fetch(url, {
-            method: "GET",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-              const mapped = data.map(mapServerLoad);
-              console.log(`[History] Loaded ${mapped.length} loads from server`);
-              setLoads(mapped);
-              return;
-            }
-            console.log("[History] Server returned empty history, using fallback");
-          } else {
-            console.warn("[History] Server responded with", res.status);
-          }
-        } catch (serverErr) {
-          console.warn("[History] Server fetch failed, using fallback:", serverErr);
-        }
-      } else {
-        console.log("[History] No driver token — using local fallback");
+      const page = await fetchPage(0);
+      if (page !== null) {
+        setLoads(page);
+        setHasMore(page.length === PAGE_SIZE);
+        return;
       }
-
-      // 2) Fallback: локальный AsyncStorage
+      // Server unreachable: fall back to loads completed on this device
+      // (real local records — the mocked demo list is gone in 1.8.6).
       const completedLoads = await getCompletedLoads();
-      if (completedLoads.length > 0) {
-        setLoads(completedLoads);
-      } else {
-        setLoads(MOCK_COMPLETED_LOADS);
-      }
+      setLoads(completedLoads as HistoryLoad[]);
+      setHasMore(false);
     } catch (error) {
       console.error("Failed to load history:", error);
-      setLoads(MOCK_COMPLETED_LOADS);
+      setLoads([]);
+      setHasMore(false);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [fetchPage]);
 
   useEffect(() => {
     loadHistory();
@@ -177,13 +204,34 @@ export default function HistoryScreen() {
     setRefreshing(false);
   }, [loadHistory]);
 
-  const renderItem = ({ item }: { item: Load }) => (
-    <LoadHistoryItem load={item} />
+  const onLoadMore = useCallback(async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await fetchPage(loads.length);
+      if (page !== null) {
+        // Dedup on id: a load delivered between page fetches shifts offsets.
+        const seen = new Set(loads.map((l) => l.id));
+        setLoads([...loads, ...page.filter((l) => !seen.has(l.id))]);
+        setHasMore(page.length === PAGE_SIZE);
+      } else {
+        setHasMore(false);
+      }
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [fetchPage, loads, loadingMore]);
+
+  const renderItem = ({ item }: { item: HistoryLoad }) => (
+    <LoadHistoryItem
+      load={item}
+      onPress={() => navigation.navigate("HistoryDetail", { load: item })}
+    />
   );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScreenHeader title="History" />
+      <ScreenHeader title={t("history.title")} />
 
       <FlatList
         data={loads}
@@ -207,9 +255,26 @@ export default function HistoryScreen() {
           !isLoading ? (
             <EmptyState
               image={emptyHistoryImage}
-              title="No Completed Loads"
-              description="Your completed deliveries will appear here."
+              title={t("history.emptyTitle")}
+              description={t("history.emptyText")}
             />
+          ) : null
+        }
+        ListFooterComponent={
+          hasMore ? (
+            <Pressable
+              onPress={onLoadMore}
+              disabled={loadingMore}
+              style={({ pressed }) => [
+                styles.loadMoreBtn,
+                { borderRadius: colors.borderRadius },
+                (pressed || loadingMore) && { opacity: 0.6 },
+              ]}
+            >
+              <ThemedText style={styles.loadMoreText}>
+                {loadingMore ? t("history.loading") : t("history.loadMore")}
+              </ThemedText>
+            </Pressable>
           ) : null
         }
       />
@@ -230,15 +295,13 @@ const styles = StyleSheet.create({
   emptyListContent: {
     flex: 1,
   },
+  // In-cab standard: card is one big ≥56px tap target with 17px route text.
   loadCard: {
     backgroundColor: PingPointColors.surface,
     borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
     borderWidth: 1,
     borderColor: PingPointColors.border,
-  },
-  loadCardArcade: {
-    borderColor: "rgba(0, 217, 255, 0.2)",
   },
   loadHeader: {
     flexDirection: "row",
@@ -266,30 +329,45 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: Spacing.sm,
     marginBottom: Spacing.sm,
-    flexWrap: "wrap",
   },
   routeText: {
-    ...Typography.body,
+    fontSize: 17,
+    fontWeight: "600",
     color: PingPointColors.textPrimary,
-    flex: 1,
+    flexShrink: 1,
+  },
+  routeTextRight: {
+    textAlign: "right",
   },
   arrow: {
-    ...Typography.body,
+    fontSize: 17,
     color: PingPointColors.textSecondary,
   },
-  deliveredDate: {
-    ...Typography.caption,
-    color: PingPointColors.textSecondary,
-    marginBottom: Spacing.sm,
-  },
-  stopsInfo: {
+  metaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     borderTopWidth: 1,
     borderTopColor: PingPointColors.border,
     paddingTop: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  metaText: {
+    ...Typography.small,
+  },
+  loadMoreBtn: {
+    minHeight: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 215, 0, 0.5)",
+    backgroundColor: "rgba(255, 215, 0, 0.08)",
     marginTop: Spacing.sm,
   },
-  stopsInfoText: {
-    ...Typography.caption,
-    color: PingPointColors.textMuted,
+  loadMoreText: {
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: 1,
+    color: PingPointColors.yellow,
   },
 });

@@ -13,6 +13,7 @@ import BackgroundGeolocation, {
 } from "react-native-background-geolocation";
 
 import { ThemedText } from "@/components/ThemedText";
+import ScreenHeader from "@/components/ScreenHeader";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useAppTheme } from "@/lib/theme-context";
 import { useDriver } from "@/lib/driver-context";
@@ -133,13 +134,15 @@ export default function TrackingStatusScreen() {
   ];
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.lg }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Proper header with a working back arrow — this screen lives behind
+          the Settings service door and used to trap the user with no way
+          back except the drawer gesture. */}
+      <ScreenHeader title="TRACKING STATUS" />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.xl }]}
         showsVerticalScrollIndicator={false}
       >
-        <ThemedText style={styles.heading}>TRACKING STATUS</ThemedText>
-
         <View style={[styles.card, { borderColor: colors.border, borderRadius: colors.borderRadius }]}>
           <View style={styles.row}>
             <ThemedText style={[styles.label, { color: colors.textSecondary }]}>State</ThemedText>
@@ -225,12 +228,6 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.xl,
-  },
-  heading: {
-    ...Typography.h3,
-    color: PingPointColors.cyan,
-    letterSpacing: 2,
-    marginBottom: Spacing.lg,
   },
   sectionTitle: {
     ...Typography.small,

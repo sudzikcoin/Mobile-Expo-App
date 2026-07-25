@@ -7,6 +7,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { PingPointColors, Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { Load, LoadStatus } from "@/lib/types";
 import { useAppTheme } from "@/lib/theme-context";
+import { useI18n } from "@/lib/i18n";
 
 interface LoadCardProps {
   load: Load;
@@ -17,14 +18,14 @@ interface LoadCardProps {
   onOpenSettings: () => void;
 }
 
-function getStatusLabel(status: LoadStatus): string {
+function getStatusLabel(status: LoadStatus, t: (k: string) => string): string {
   switch (status) {
     case "PLANNED":
-      return "PLANNED";
+      return t("load.planned");
     case "IN_TRANSIT":
-      return "IN TRANSIT";
+      return t("load.inTransit");
     case "DELIVERED":
-      return "DELIVERED";
+      return t("load.delivered");
     default:
       return status;
   }
@@ -39,6 +40,7 @@ function LoadCard({
   onOpenSettings,
 }: LoadCardProps) {
   const { colors, isArcade } = useAppTheme();
+  const { t } = useI18n();
 
   const handleToggleLocation = () => {
     if (Platform.OS !== "web") {
@@ -65,7 +67,7 @@ function LoadCard({
       isArcade && Shadows.arcade.cyan,
     ]}>
       <View style={styles.header}>
-        <ThemedText style={[styles.loadNumber, { color: isArcade ? PingPointColors.yellow : "#ffffff" }]}>LOAD #{load.loadNumber}</ThemedText>
+        <ThemedText style={[styles.loadNumber, { color: isArcade ? PingPointColors.yellow : "#ffffff" }]}>{t("load.number", { number: load.loadNumber })}</ThemedText>
         <View style={[
           styles.statusBadge,
           { 
@@ -73,7 +75,7 @@ function LoadCard({
             backgroundColor: isArcade ? "rgba(0, 217, 255, 0.1)" : "rgba(255, 255, 255, 0.1)",
           }
         ]}>
-          <ThemedText style={[styles.statusText, { color: isArcade ? PingPointColors.cyan : "#ffffff" }]}>{getStatusLabel(load.status)}</ThemedText>
+          <ThemedText style={[styles.statusText, { color: isArcade ? PingPointColors.cyan : "#ffffff" }]}>{getStatusLabel(load.status, t)}</ThemedText>
         </View>
       </View>
 
@@ -114,10 +116,10 @@ function LoadCard({
             ]}
           >
             <Feather name="settings" size={18} color={PingPointColors.background} />
-            <ThemedText style={styles.locationButtonText}>Open Settings</ThemedText>
+            <ThemedText style={styles.locationButtonText}>{t("load.openSettings")}</ThemedText>
           </Pressable>
           <ThemedText style={styles.deniedText}>
-            Location permission was denied. Enable it in Settings to share your location.
+            {t("load.locationDenied")}
           </ThemedText>
         </View>
       ) : (
@@ -146,7 +148,7 @@ function LoadCard({
                 color={PingPointColors.background}
               />
               <ThemedText style={styles.locationButtonText}>
-                {isLocationEnabled ? "Location Sharing Active" : "Enable Location Sharing"}
+                {isLocationEnabled ? t("load.locationActive") : t("load.locationEnable")}
               </ThemedText>
             </>
           )}

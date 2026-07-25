@@ -10,6 +10,7 @@ import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/
 import { LogEntry } from "@/lib/types";
 import { getLogs } from "@/lib/storage";
 import { useAppTheme } from "@/lib/theme-context";
+import { shareDiagnostics } from "@/lib/diagnostics";
 
 import emptyLogsImage from "@/assets/images/empty-logs.png";
 
@@ -132,9 +133,17 @@ export default function LogsScreen() {
     <LogItem log={item} />
   );
 
+  // Share/Export for support: the whole on-device log via the OS share
+  // sheet. View-only otherwise — this screen lives behind the service door.
+  const handleShare = () => {
+    void shareDiagnostics("PingPoint Driver log").catch((e) =>
+      console.warn("[Logs] share failed:", e),
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScreenHeader title="Logs" />
+      <ScreenHeader title="Logs" rightIcon="share" onRightPress={handleShare} />
 
       <FlatList
         data={logs}

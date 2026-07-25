@@ -14,6 +14,8 @@ import RootStackNavigator, { RootStackParamList } from "@/navigation/RootStackNa
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/lib/theme-context";
 import { DriverProvider } from "@/lib/driver-context";
+import { I18nProvider } from "@/lib/i18n";
+import { UnitsProvider } from "@/lib/units-context";
 import { PingPointColors } from "@/constants/theme";
 
 const linking: LinkingOptions<RootStackParamList> = {
@@ -66,6 +68,8 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      <I18nProvider>
+      <UnitsProvider>
       <ThemeProvider>
         <DriverProvider>
           <QueryClientProvider client={queryClient}>
@@ -82,6 +86,8 @@ export default function App() {
           </QueryClientProvider>
         </DriverProvider>
       </ThemeProvider>
+      </UnitsProvider>
+      </I18nProvider>
     </ErrorBoundary>
   );
 }
