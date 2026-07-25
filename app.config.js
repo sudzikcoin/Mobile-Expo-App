@@ -4,7 +4,7 @@ module.exports = {
   expo: {
     name: "PingPoint Driver",
     slug: "pingpoint-driver",
-    version: "1.8.0",
+    version: "1.8.1",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "pingpoint",
@@ -33,6 +33,11 @@ module.exports = {
         // without this key iOS kills the app the moment the SDK touches it.
         NSMotionUsageDescription:
           "PingPoint Driver uses motion activity to detect when your truck starts and stops moving, which saves battery during long stops.",
+        // PingPoint NAV WebView: the Permit tab's TAKE PHOTO opens the
+        // camera from the embedded page. Without this key iOS kills the app
+        // when WKWebView requests capture.
+        NSCameraUsageDescription:
+          "PingPoint Driver uses the camera to photograph oversize-load permits in PingPoint NAV.",
         // location + bluetooth-central: GPS tracking and BLE ELD frames in
         // background. fetch/processing: TSBackgroundFetch (transistorsoft's
         // scheduler, pulled in via react-native-background-fetch) registers
@@ -49,10 +54,10 @@ module.exports = {
       },
     },
     android: {
-      // Keep in lockstep with `version` (1.8.0 -> 180); EAS autoIncrement used
+      // Keep in lockstep with `version` (1.8.1 -> 181); EAS autoIncrement used
       // to own this remotely, but local prebuild emits versionCode 1 without it
       // and Android then refuses the install as a downgrade.
-      versionCode: 180,
+      versionCode: 181,
       adaptiveIcon: {
         backgroundColor: "#0a0a1f",
         foregroundImage: "./assets/images/android-icon-foreground.png",
@@ -81,6 +86,9 @@ module.exports = {
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.BLUETOOTH_SCAN",
+        // PingPoint NAV WebView camera capture (Permit tab TAKE PHOTO):
+        // WebChromeClient can only grant what the app itself holds.
+        "CAMERA",
       ],
       intentFilters: [
         {

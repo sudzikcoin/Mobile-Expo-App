@@ -15,6 +15,7 @@ import LogsScreen from "@/screens/LogsScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
 import LoadDetailsScreen from "@/screens/LoadDetailsScreen";
 import TrackingStatusScreen from "@/screens/TrackingStatusScreen";
+import NavScreen from "@/screens/NavScreen";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { ThemedText } from "@/components/ThemedText";
 import { useAppTheme } from "@/lib/theme-context";
@@ -27,6 +28,7 @@ export type DrawerParamList = {
   Logs: undefined;
   Settings: undefined;
   TrackingStatus: undefined;
+  Nav: undefined;
 };
 
 const Drawer = createDrawerNavigator<DrawerParamList>();
@@ -128,6 +130,20 @@ export default function DrawerNavigator() {
           drawerIcon: ({ color, size }) => (
             <Feather name="navigation" size={size} color={color} />
           ),
+        }}
+      />
+      <Drawer.Screen
+        name="Nav"
+        component={NavScreen}
+        options={{
+          drawerLabel: "PingPoint NAV",
+          drawerIcon: ({ color, size }) => (
+            <Feather name="truck" size={size} color={color} />
+          ),
+          // NAV state (parsed RC, built route) lives in the WebView — the
+          // drawer keeps visited screens mounted, and freeze is off so the
+          // WebView keeps its session while the user is elsewhere in the app.
+          freezeOnBlur: false,
         }}
       />
       <Drawer.Screen
