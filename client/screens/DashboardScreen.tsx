@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, RefreshControl, Platform, Pressable, Link
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
+import * as Location from "expo-location";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -15,6 +16,7 @@ import EldStatusPill from "@/components/EldStatusPill";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { isStopCurrent } from "@/lib/mock-data";
 import { buildTruckerPathLoadLink } from "@/lib/truckerpath";
+import { buildSimpleGoogleLink, fetchGoogleTruckRoute } from "@/lib/navroute";
 import { useDriver } from "@/lib/driver-context";
 import { maskToken } from "@/lib/storage";
 import { useAppTheme } from "@/lib/theme-context";
@@ -119,6 +121,72 @@ export default function DashboardScreen() {
       await Linking.openURL(tpLink.url);
     } catch {
       Alert.alert("Trucker Path app not installed");
+    }
+  };
+
+  // Google Maps goes through the NAV routing engine: origin is always the
+  // truck's live position and stops are always the pending ones, so a re-tap
+  // anywhere mid-trip rebuilds the route from wherever the truck is now.
+  const [gmapsBuilding, setGmapsBuilding] = useState(false);
+
+  const offerSimpleGoogleFallback = () => {
+    const simpleUrl = load ? buildSimpleGoogleLink(load) : null;
+    if (!simpleUrl) {
+      Alert.alert(
+        "Route engine unavailable",
+        "Couldn't build the truck-safe route. Try again in a minute.",
+      );
+      return;
+    }
+    Alert.alert(
+      "Route engine unavailable",
+      "Couldn't build the truck-safe route. Open a plain Google Maps route to your stops instead? It will NOT account for truck restrictions — watch for low bridges and weight limits yourself.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Open anyway",
+          onPress: () => {
+            Linking.openURL(simpleUrl).catch(() => {});
+          },
+        },
+      ],
+    );
+  };
+
+  const handleOpenGoogleMaps = async () => {
+    if (tpLink.state !== "ready" || !load || gmapsBuilding) return;
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    setGmapsBuilding(true);
+    try {
+      // The engine needs a real origin; without a GPS fix the only honest
+      // option is the stops-only fallback (Google fills in "My Location").
+      const fgPerm = await Location.getForegroundPermissionsAsync();
+      if (fgPerm.status !== "granted") {
+        offerSimpleGoogleFallback();
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      const result = await fetchGoogleTruckRoute(load, {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      });
+      if (result.state !== "ready") {
+        offerSimpleGoogleFallback();
+        return;
+      }
+      try {
+        await Linking.openURL(result.url);
+      } catch {
+        Alert.alert("Couldn't open Google Maps");
+      }
+    } catch {
+      offerSimpleGoogleFallback();
+    } finally {
+      setGmapsBuilding(false);
     }
   };
 
@@ -256,6 +324,35 @@ export default function DashboardScreen() {
                     Stop coordinates unavailable — ask dispatch to update the load.
                   </ThemedText>
                 ) : null}
+
+                <Pressable
+                  onPress={handleOpenGoogleMaps}
+                  disabled={tpLink.state !== "ready" || gmapsBuilding}
+                  style={({ pressed }) => [
+                    styles.tpButton,
+                    styles.gmapsButton,
+                    {
+                      borderColor: isArcade ? PingPointColors.cyan : "rgba(0, 217, 255, 0.5)",
+                      borderRadius: colors.borderRadius,
+                    },
+                    tpLink.state !== "ready" && styles.tpButtonDisabled,
+                    pressed && styles.tpButtonPressed,
+                  ]}
+                >
+                  <Feather
+                    name="map"
+                    size={20}
+                    color={tpLink.state === "ready" ? PingPointColors.cyan : PingPointColors.textMuted}
+                  />
+                  <ThemedText
+                    style={[
+                      styles.tpButtonText,
+                      tpLink.state !== "ready" && { color: PingPointColors.textMuted },
+                    ]}
+                  >
+                    {gmapsBuilding ? "BUILDING ROUTE…" : "OPEN IN GOOGLE MAPS"}
+                  </ThemedText>
+                </Pressable>
               </View>
             ) : null}
           </>
@@ -390,6 +487,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 217, 255, 0.1)",
     borderWidth: 1,
     borderColor: "rgba(0, 217, 255, 0.5)",
+  },
+  gmapsButton: {
+    marginTop: Spacing.sm,
   },
   tpButtonPressed: {
     backgroundColor: "rgba(0, 217, 255, 0.25)",
