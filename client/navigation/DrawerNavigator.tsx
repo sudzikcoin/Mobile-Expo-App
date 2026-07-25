@@ -192,7 +192,16 @@ export default function DrawerNavigator() {
       <Drawer.Screen name="Dashboard" component={DashboardScreen} />
       <Drawer.Screen name="History" component={HistoryScreen} />
       <Drawer.Screen name="HistoryDetail" component={HistoryDetailScreen} />
-      <Drawer.Screen name="Status" component={StatusScreen} />
+      <Drawer.Screen
+        name="Status"
+        component={StatusScreen}
+        options={{
+          // Same as Nav below: the telemetry page lives in a WebView, and a
+          // frozen WebView comes back as a black surface on Android when the
+          // drawer re-shows the kept-mounted screen. Keep it unfrozen.
+          freezeOnBlur: false,
+        }}
+      />
       <Drawer.Screen
         name="Nav"
         component={NavScreen}

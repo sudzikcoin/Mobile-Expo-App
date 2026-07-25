@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { View, StyleSheet, ActivityIndicator } from "react-native";
 import { WebView } from "react-native-webview";
+import { useFocusEffect } from "@react-navigation/native";
 
 import ScreenHeader from "@/components/ScreenHeader";
 import { PingPointColors } from "@/constants/theme";
@@ -21,21 +22,28 @@ export default function StatusScreen() {
   const { units } = useUnits();
   const [url, setUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    getActiveToken().then((token) => {
-      if (cancelled) return;
-      const params = new URLSearchParams({
-        token: token ?? "",
-        units,
-        lang,
+  // Rebuilt on every focus, not once on mount: the drawer keeps this screen
+  // mounted, so a mount-time effect would pin the first token forever (blank
+  // token if binding wasn't ready yet, stale token after a re-bind). Setting
+  // the same string again is a no-op for the WebView, so a plain reopen
+  // doesn't reload the page.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      getActiveToken().then((token) => {
+        if (cancelled) return;
+        const params = new URLSearchParams({
+          token: token ?? "",
+          units,
+          lang,
+        });
+        setUrl(`${STATUS_BASE}?${params.toString()}`);
       });
-      setUrl(`${STATUS_BASE}?${params.toString()}`);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [units, lang]);
+      return () => {
+        cancelled = true;
+      };
+    }, [units, lang])
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
