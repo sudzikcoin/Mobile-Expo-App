@@ -47,6 +47,14 @@ export default function NavScreen() {
       <WebView
         source={{ uri: NAV_URL }}
         style={styles.webview}
+        // Without "*", react-native-webview's JS-side whitelist (default
+        // http/https only) swallows every custom-scheme tap BEFORE
+        // onShouldStartLoadWithRequest runs: it gates on Linking.canOpenURL,
+        // which iOS fails for schemes missing from LSApplicationQueriesSchemes
+        // and Android 11+ fails for packages missing from <queries> — the
+        // Trucker Path button read as a dead tap. "*" routes every URL through
+        // our handler, which calls openURL directly (no canOpenURL gate).
+        originWhitelist={["*"]}
         onShouldStartLoadWithRequest={handleShouldStartLoad}
         // window.open() must navigate the same WebView so the URL passes
         // through onShouldStartLoadWithRequest instead of being swallowed.

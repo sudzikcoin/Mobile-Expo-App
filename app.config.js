@@ -4,7 +4,7 @@ module.exports = {
   expo: {
     name: "PingPoint Driver",
     slug: "pingpoint-driver",
-    version: "1.8.1",
+    version: "1.8.2",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "pingpoint",
@@ -50,14 +50,26 @@ module.exports = {
           "processing",
         ],
         BGTaskSchedulerPermittedIdentifiers: ["com.transistorsoft.fetch"],
+        // NAV WebView hands truckerpath:// etc. to the OS. openURL itself
+        // doesn't need these, but anything that consults canOpenURL (incl.
+        // react-native-webview's whitelist fallback) reports "cannot open"
+        // for schemes not listed here.
+        LSApplicationQueriesSchemes: [
+          "truckerpath",
+          "comgooglemaps",
+          "googlemaps",
+          "maps",
+          "waze",
+          "com.sygic.aura",
+        ],
         ITSAppUsesNonExemptEncryption: false,
       },
     },
     android: {
-      // Keep in lockstep with `version` (1.8.1 -> 181); EAS autoIncrement used
+      // Keep in lockstep with `version` (1.8.2 -> 182); EAS autoIncrement used
       // to own this remotely, but local prebuild emits versionCode 1 without it
       // and Android then refuses the install as a downgrade.
-      versionCode: 181,
+      versionCode: 182,
       adaptiveIcon: {
         backgroundColor: "#0a0a1f",
         foregroundImage: "./assets/images/android-icon-foreground.png",
