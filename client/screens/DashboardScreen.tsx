@@ -11,14 +11,13 @@ import LoadCard from "@/components/LoadCard";
 import StopCard from "@/components/StopCard";
 import RewardAnimation from "@/components/RewardAnimation";
 import TrackingDiagnostics from "@/components/TrackingDiagnostics";
+import EldStatusPill from "@/components/EldStatusPill";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { isStopCurrent } from "@/lib/mock-data";
 import { buildTruckerPathLoadLink } from "@/lib/truckerpath";
 import { useDriver } from "@/lib/driver-context";
 import { maskToken } from "@/lib/storage";
 import { useAppTheme } from "@/lib/theme-context";
-import { useIOSiXTelemetry } from "@/lib/iosix/hook";
-import { kphToMph } from "@/lib/units";
 import type { DrawerParamList } from "@/navigation/DrawerNavigator";
 
 type DashboardRouteProp = RouteProp<DrawerParamList, "Dashboard">;
@@ -45,19 +44,9 @@ export default function DashboardScreen() {
     setToken,
   } = useDriver();
 
-  const iosix = useIOSiXTelemetry(true);
-
-  // Pill speed: ECU road speed (f3) when present and sane, else GPS ground
-  // speed (f13). Integer mph; null hides the segment entirely.
-  const pillSpeedKph =
-    iosix.telemetry.ecuSpeedKph !== null &&
-    iosix.telemetry.ecuSpeedKph >= 0 &&
-    iosix.telemetry.ecuSpeedKph <= 200
-      ? iosix.telemetry.ecuSpeedKph
-      : iosix.telemetry.gpsSpeedKph;
-  const pillSpeedMph =
-    pillSpeedKph !== null ? Math.round(kphToMph(pillSpeedKph)) : null;
-
+  // Telemetry lives inside EldStatusPill now: BLE ticks re-render only the
+  // pill. Keeping the subscription out of this component is what prevents
+  // the screen-wide re-render storm — do not lift it back up here.
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -92,7 +81,7 @@ export default function DashboardScreen() {
     }
   };
 
-  const onStopAction = async (stopId: string, action: "arrive" | "depart") => {
+  const onStopAction = useCallback(async (stopId: string, action: "arrive" | "depart") => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -105,12 +94,14 @@ export default function DashboardScreen() {
       setRewardPoints(result.pointsAwarded);
       setShowReward(true);
     }
-  };
+  }, [handleStopAction]);
 
-  const handleRewardComplete = () => {
+  // Stable identity matters: RewardAnimation keeps its dismiss timer across
+  // re-renders, and memoized StopCards skip re-rendering on unrelated state.
+  const handleRewardComplete = useCallback(() => {
     setShowReward(false);
     setRewardPoints(0);
-  };
+  }, []);
 
   // Hidden when there's no load or nothing left to drive; disabled (never
   // hidden) if a remaining stop lacks coordinates so the miss is visible.
@@ -214,54 +205,7 @@ export default function DashboardScreen() {
 
             {isLocationEnabled ? <TrackingDiagnostics /> : null}
 
-            <View style={[
-              styles.gpsIndicator,
-              {
-                backgroundColor: isArcade ? "rgba(0, 217, 255, 0.1)" : "rgba(255, 255, 255, 0.05)",
-                borderColor: isArcade ? PingPointColors.cyan : colors.border,
-                borderRadius: colors.borderRadius,
-              }
-            ]}>
-              <View style={styles.gpsStatusRow}>
-                <View
-                  style={[
-                    styles.gpsDot,
-                    {
-                      backgroundColor: iosix.connected
-                        ? (isArcade ? "#00ff88" : "#ffffff")
-                        : iosix.scanning
-                        ? "#3498db"
-                        : "#7f8c8d",
-                    },
-                  ]}
-                />
-                <ThemedText
-                  style={[
-                    styles.gpsStatusText,
-                    { color: isArcade ? PingPointColors.cyan : "#ffffff" },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {iosix.connected
-                    // Driver-facing telemetry: RPM (f2), battery voltage (f8)
-                    // and road speed. Speed prefers the ECU value (f3) when
-                    // present and sane — it is hard 0 with the engine off and
-                    // governed at 120 km/h — falling back to GPS ground speed
-                    // (f13, drifts a few km/h parked but works without ECU
-                    // data). With the engine off (f0=0) RPM would be a
-                    // stale/zero reading — show ENGINE OFF instead; voltage
-                    // stays live on battery power.
-                    ? iosix.telemetry.ignition === false
-                      ? `ELD · ENGINE OFF${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}`
-                      : `ELD${iosix.telemetry.rpm !== null ? ` · ${Math.round(iosix.telemetry.rpm)} RPM` : ""}${iosix.telemetry.batteryVoltage !== null ? ` · ${iosix.telemetry.batteryVoltage.toFixed(1)}V` : ""}${pillSpeedMph !== null ? ` · ${pillSpeedMph} mph` : ""}`
-                    : iosix.scanning
-                    ? "Scanning for ELD..."
-                    : iosix.error === "ble_permission_denied"
-                    ? "ELD: Bluetooth permission denied"
-                    : "ELD Not Connected"}
-                </ThemedText>
-              </View>
-            </View>
+            <EldStatusPill />
 
             <View style={styles.stopsSection}>
               <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>STOPS</ThemedText>
@@ -342,10 +286,16 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  // Tighter vertical rhythm (chrome, not tap targets) so the pending stop
+  // and the TP button sit above the fold on a 390x844 phone. maxWidth keeps
+  // line lengths sane on the 800+px fleet tablet.
   content: {
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    gap: Spacing.lg,
+    paddingTop: Spacing.sm,
+    gap: Spacing.sm,
+    maxWidth: 640,
+    width: "100%",
+    alignSelf: "center",
   },
   loadingContainer: {
     flex: 1,
@@ -380,13 +330,15 @@ const styles = StyleSheet.create({
     ...Typography.badge,
     color: PingPointColors.background,
   },
+  // Status pill, not a tap target — 48px keeps the fold budget in check.
   gpsIndicator: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "rgba(0, 217, 255, 0.1)",
+    minHeight: 48,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: "rgba(0, 217, 255, 0.3)",
@@ -415,17 +367,16 @@ const styles = StyleSheet.create({
     color: PingPointColors.textSecondary,
   },
   stopsSection: {
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   sectionTitle: {
     fontSize: 14,
     fontWeight: "600",
     color: PingPointColors.textMuted,
     letterSpacing: 2,
-    marginBottom: Spacing.xs,
   },
   stopsList: {
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   // In-cab standard: full-width, ≥56px target, cyan-outline family (matches
   // the ELD/GPS pills; NAV uses the same treatment for its primary CTAs).

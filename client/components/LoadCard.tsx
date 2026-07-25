@@ -30,7 +30,7 @@ function getStatusLabel(status: LoadStatus): string {
   }
 }
 
-export default function LoadCard({
+function LoadCard({
   load,
   isLocationEnabled,
   isLocationLoading,
@@ -156,11 +156,15 @@ export default function LoadCard({
   );
 }
 
+// Memoized: props only change on load/location-state changes, so telemetry
+// ticks and other Dashboard state elsewhere no longer re-render the card.
+export default React.memo(LoadCard);
+
 const styles = StyleSheet.create({
   container: {
     backgroundColor: PingPointColors.surface,
     borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
+    padding: Spacing.md,
     borderWidth: 1,
     borderColor: PingPointColors.border,
   },
@@ -171,7 +175,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
   loadNumber: {
     ...Typography.h3,
@@ -193,7 +197,7 @@ const styles = StyleSheet.create({
   routeContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.md,
     paddingHorizontal: Spacing.sm,
   },
   routePoint: {
@@ -213,13 +217,15 @@ const styles = StyleSheet.create({
     backgroundColor: PingPointColors.border,
     marginHorizontal: Spacing.md,
   },
+  // Tap target — keep ≥56px even in the compact layout.
   locationButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: Spacing.sm,
     backgroundColor: PingPointColors.yellow,
-    paddingVertical: Spacing.lg,
+    minHeight: 56,
+    paddingVertical: Spacing.md,
     borderRadius: BorderRadius.md,
   },
   locationButtonEnabled: {

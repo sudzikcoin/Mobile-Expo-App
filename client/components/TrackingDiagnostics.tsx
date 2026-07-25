@@ -81,21 +81,23 @@ export default function TrackingDiagnostics() {
         },
       ]}
     >
+      {/* Single compact row: three inline values instead of three rows —
+          this is secondary status, it shouldn't cost fold space. */}
       <View style={styles.row}>
-        <ThemedText style={[styles.label, { color: colors.textSecondary }]}>State</ThemedText>
-        <ThemedText style={[styles.value, { color: stateColor }]}>{stateLabel}</ThemedText>
-      </View>
-      <View style={styles.row}>
-        <ThemedText style={[styles.label, { color: colors.textSecondary }]}>Pending pings</ThemedText>
-        <ThemedText style={[styles.value, { color: colors.textPrimary }]}>
-          {diag.pendingPings}
-        </ThemedText>
-      </View>
-      <View style={styles.row}>
-        <ThemedText style={[styles.label, { color: colors.textSecondary }]}>Distance filter</ThemedText>
-        <ThemedText style={[styles.value, { color: colors.textPrimary }]}>
-          {diag.state.distanceFilter ?? "—"} m
-        </ThemedText>
+        <View style={styles.inlinePair}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>State </ThemedText>
+          <ThemedText style={[styles.value, { color: stateColor }]}>{stateLabel}</ThemedText>
+        </View>
+        <View style={styles.inlinePair}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>Pending </ThemedText>
+          <ThemedText style={[styles.value, { color: colors.textPrimary }]}>{diag.pendingPings}</ThemedText>
+        </View>
+        <View style={styles.inlinePair}>
+          <ThemedText style={[styles.label, { color: colors.textSecondary }]}>Filter </ThemedText>
+          <ThemedText style={[styles.value, { color: colors.textPrimary }]}>
+            {diag.state.distanceFilter ?? "—"} m
+          </ThemedText>
+        </View>
       </View>
     </View>
   );
@@ -103,14 +105,19 @@ export default function TrackingDiagnostics() {
 
 const styles = StyleSheet.create({
   card: {
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     borderWidth: 1,
-    marginTop: Spacing.sm,
-    gap: Spacing.xs,
   },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+  },
+  inlinePair: {
+    flexDirection: "row",
     alignItems: "center",
   },
   label: {

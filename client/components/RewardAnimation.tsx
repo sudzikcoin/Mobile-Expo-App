@@ -20,6 +20,14 @@ export default function RewardAnimation({ points, visible, onComplete }: RewardA
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const translateYAnim = useRef(new Animated.Value(50)).current;
 
+  // The dismiss timer must survive parent re-renders. With onComplete in the
+  // effect deps, every telemetry-tick re-render (parent recreates the
+  // callback) cleared and re-armed the 1.5s timeout — ticks arrive every
+  // ~1s with the ELD connected, so the timer never fired and the overlay
+  // stayed up, blocking the whole dashboard. Latest callback via ref.
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
   useEffect(() => {
     if (visible) {
       if (Platform.OS !== "web") {
@@ -68,18 +76,20 @@ export default function RewardAnimation({ points, visible, onComplete }: RewardA
             useNativeDriver: true,
           }),
         ]).start(() => {
-          onComplete();
+          onCompleteRef.current();
         });
       }, 1500);
 
       return () => clearTimeout(timeout);
     }
-  }, [visible, scaleAnim, opacityAnim, translateYAnim, onComplete]);
+  }, [visible, scaleAnim, opacityAnim, translateYAnim]);
 
   if (!visible) return null;
 
   return (
-    <View style={styles.overlay}>
+    // Purely decorative — must never intercept touches, even if a future
+    // regression keeps it mounted longer than intended.
+    <View style={styles.overlay} pointerEvents="none">
       <Animated.View
         style={[
           styles.container,

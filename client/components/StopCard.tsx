@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, StyleSheet, Pressable, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -16,10 +16,20 @@ interface StopCardProps {
   isLoading?: boolean;
 }
 
-export default function StopCard({ stop, isCurrent, onAction, isLoading }: StopCardProps) {
+function formatTimeShort(isoString: string): string {
+  const date = new Date(isoString);
+  const hours = date.getHours().toString().padStart(2, "0");
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function StopCard({ stop, isCurrent, onAction, isLoading }: StopCardProps) {
   const { colors, isArcade } = useAppTheme();
   const completed = isStopCompleted(stop);
   const actionLabel = getStopActionLabel(stop);
+  // Collapsed by default: completed stops render as a slim history row and
+  // the address clamps to 2 lines. Tap anywhere on the card body to expand.
+  const [expanded, setExpanded] = useState(false);
 
   const handleAction = () => {
     if (Platform.OS !== "web") {
@@ -28,6 +38,38 @@ export default function StopCard({ stop, isCurrent, onAction, isLoading }: StopC
     const action = stop.status === "PENDING" ? "arrive" : "depart";
     onAction(stop.id, action);
   };
+
+  const primaryAddress = stop.fullAddress || `${stop.city}${stop.state ? ", " + stop.state : ""}`;
+
+  if (completed && !expanded) {
+    // Slim history row: check + short place + departed time. ≥44px row is
+    // fine — it's history, not a primary action; tap expands the full card.
+    return (
+      <Pressable
+        onPress={() => setExpanded(true)}
+        style={[
+          styles.slimRow,
+          {
+            backgroundColor: colors.surfaceLight,
+            borderColor: colors.border,
+            borderRadius: colors.borderRadius,
+          },
+        ]}
+      >
+        <View style={styles.slimBadge}>
+          <Feather name="check" size={12} color={PingPointColors.textPrimary} />
+        </View>
+        <ThemedText style={styles.slimText} numberOfLines={1}>
+          {stop.type === "PICKUP" ? "PU" : "DEL"} · {stop.city}
+          {stop.state ? `, ${stop.state}` : ""}
+        </ThemedText>
+        {stop.departedAt ? (
+          <ThemedText style={styles.slimTime}>dep {formatTimeShort(stop.departedAt)}</ThemedText>
+        ) : null}
+        <Feather name="chevron-down" size={16} color={PingPointColors.textMuted} />
+      </Pressable>
+    );
+  }
 
   return (
     <View
@@ -59,7 +101,7 @@ export default function StopCard({ stop, isCurrent, onAction, isLoading }: StopC
         </View>
       </View>
 
-      <View style={styles.content}>
+      <Pressable style={styles.content} onPress={() => setExpanded(!expanded)}>
         <View style={styles.headerRow}>
           <View
             style={[
@@ -69,21 +111,21 @@ export default function StopCard({ stop, isCurrent, onAction, isLoading }: StopC
           >
             <ThemedText style={styles.typeText}>{stop.type}</ThemedText>
           </View>
+          <ThemedText style={[styles.companyName, completed && styles.textCompleted]} numberOfLines={expanded ? undefined : 1}>
+            {stop.companyName}
+          </ThemedText>
         </View>
 
+        {/* Полный адрес если пришёл с сервера, иначе city, state; свёрнуто — максимум 2 строки */}
         <ThemedText
-          style={[styles.companyName, completed && styles.textCompleted]}
+          style={[styles.location, completed && styles.textCompleted]}
+          numberOfLines={expanded ? undefined : 2}
         >
-          {stop.companyName}
+          {primaryAddress}
         </ThemedText>
 
-        {/* Отображаем полный адрес если он пришёл с сервера, иначе city, state */}
-        <ThemedText style={[styles.location, completed && styles.textCompleted]}>
-          {stop.fullAddress || `${stop.city}${stop.state ? ", " + stop.state : ""}`}
-        </ThemedText>
-
-        {/* Дополнительная строка с address — только если fullAddress не используется или отличается */}
-        {stop.address && stop.address !== stop.fullAddress ? (
+        {/* Дополнительная строка с address — только развёрнуто и если отличается */}
+        {expanded && stop.address && stop.address !== stop.fullAddress ? (
           <ThemedText style={[styles.address, completed && styles.textCompleted]}>
             {stop.address}
           </ThemedText>
@@ -101,18 +143,12 @@ export default function StopCard({ stop, isCurrent, onAction, isLoading }: StopC
         </View>
 
         {completed && stop.arrivedAt && (
-          <View style={styles.completedTimes}>
-            <ThemedText style={styles.completedTimeText}>
-              Arrived: {formatDateTime(stop.arrivedAt)}
-            </ThemedText>
-            {stop.departedAt && (
-              <ThemedText style={styles.completedTimeText}>
-                Departed: {formatDateTime(stop.departedAt)}
-              </ThemedText>
-            )}
-          </View>
+          <ThemedText style={styles.completedTimeText}>
+            Arrived {formatTimeShort(stop.arrivedAt)}
+            {stop.departedAt ? ` · Departed ${formatTimeShort(stop.departedAt)}` : ""}
+          </ThemedText>
         )}
-      </View>
+      </Pressable>
 
       {actionLabel && !completed && (
         <View style={styles.actionSection}>
@@ -121,7 +157,7 @@ export default function StopCard({ stop, isCurrent, onAction, isLoading }: StopC
             disabled={isLoading}
             style={({ pressed }) => [
               styles.actionButton,
-              { 
+              {
                 backgroundColor: isArcade ? PingPointColors.yellow : "#ffffff",
                 borderRadius: colors.borderRadius,
               },
@@ -137,12 +173,16 @@ export default function StopCard({ stop, isCurrent, onAction, isLoading }: StopC
   );
 }
 
+// Re-renders only when its own props change — keeps telemetry/status
+// updates elsewhere on the Dashboard from re-rendering every stop row.
+export default React.memo(StopCard);
+
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     backgroundColor: PingPointColors.surface,
     borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
+    padding: Spacing.md,
     borderWidth: 1,
     borderColor: PingPointColors.border,
   },
@@ -150,12 +190,33 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     backgroundColor: PingPointColors.surfaceLight,
   },
-  containerCurrent: {
-    borderColor: PingPointColors.cyan,
-    borderWidth: 2,
+  slimRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    minHeight: 44,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderWidth: 1,
+    opacity: 0.7,
   },
-  containerCurrentArcade: {
-    ...Shadows.arcade.cyan,
+  slimBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: BorderRadius.full,
+    backgroundColor: PingPointColors.cyan,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  slimText: {
+    ...Typography.small,
+    fontWeight: "600",
+    color: PingPointColors.textMuted,
+    flex: 1,
+  },
+  slimTime: {
+    ...Typography.caption,
+    color: PingPointColors.textMuted,
   },
   leftSection: {
     marginRight: Spacing.md,
@@ -188,7 +249,9 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: "row",
-    marginBottom: Spacing.sm,
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   typeBadge: {
     paddingHorizontal: Spacing.sm,
@@ -204,14 +267,15 @@ const styles = StyleSheet.create({
     color: PingPointColors.textPrimary,
   },
   companyName: {
-    ...Typography.body,
+    ...Typography.small,
     fontWeight: "600",
-    color: PingPointColors.textPrimary,
-    marginBottom: Spacing.xs,
+    color: PingPointColors.textSecondary,
+    flexShrink: 1,
   },
   location: {
     ...Typography.small,
     fontSize: 22,
+    lineHeight: 28,
     fontWeight: "600",
     color: "#FFFFFF",
     marginBottom: 2,
@@ -221,7 +285,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "500",
     color: "#FFFFFF",
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   timeRow: {
     flexDirection: "row",
@@ -237,21 +301,21 @@ const styles = StyleSheet.create({
   textCompleted: {
     color: PingPointColors.textMuted,
   },
-  completedTimes: {
-    marginTop: Spacing.sm,
-    paddingTop: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: PingPointColors.border,
-  },
   completedTimeText: {
     ...Typography.caption,
     color: PingPointColors.textMuted,
+    marginTop: Spacing.xs,
   },
   actionSection: {
     marginLeft: Spacing.md,
     justifyContent: "center",
   },
+  // Primary in-cab tap target — 56px minimum stays even in the compact pass.
   actionButton: {
+    minHeight: 56,
+    minWidth: 96,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: PingPointColors.yellow,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
