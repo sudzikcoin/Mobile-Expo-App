@@ -283,11 +283,10 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       console.warn("[Driver] Skipping tracking init: not a truck token");
       return;
     }
-    const truckId = await getTruckId();
-    if (!truckId) {
-      console.warn("[Driver] Skipping tracking init: missing truck_id");
-      return;
-    }
+    // The ping endpoint resolves everything from the trk_ token and ignores
+    // the truck_id body param, so a missing stored id (bind responses before
+    // 2026-07-26 omitted it) must not silently block tracking.
+    const truckId = (await getTruckId()) || "unknown";
     try {
       await withTimeout(initTracking(token, truckId), 15000, "initTracking");
       console.log("[Driver] Transistorsoft tracking started");
@@ -297,6 +296,11 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       void requestBatteryOptimizationExemption();
     } catch (err) {
       console.error("[Driver] startLocationTracking failed:", err);
+      // Loud, on-screen: a bound driver whose GPS never starts is invisible
+      // to the broker until someone asks where the truck is.
+      setError(
+        'Location tracking could not start. Allow location "All the time" in system settings, then reopen the app.',
+      );
     }
   }, [token]);
 

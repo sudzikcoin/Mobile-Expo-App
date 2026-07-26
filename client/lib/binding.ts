@@ -28,7 +28,7 @@ import { getProductionApiUrl } from "./api";
 
 export interface DriverBinding {
   token: string; // trk_ permanent token
-  truck_id: string;
+  truck_id?: string; // absent in bind responses before 2026-07-26
   driver_name: string | null;
   truck_number: string | null;
   company_id: string;
@@ -75,7 +75,13 @@ export async function bindDriverToken(drvToken: string): Promise<BindResult> {
 // Persist the binding exactly like the legacy confirm step did.
 export async function persistBinding(binding: DriverBinding): Promise<void> {
   await setTruckToken(binding.token);
-  await setTruckId(binding.truck_id);
+  // Older servers omitted truck_id from the bind response (bound-but-silent
+  // bug) — never persist "undefined"; tracking falls back gracefully.
+  if (binding.truck_id) {
+    await setTruckId(binding.truck_id);
+  } else {
+    console.warn("[Binding] bind response missing truck_id — tracking will use a fallback id");
+  }
   await setTruckNumber(binding.truck_number ?? "");
   await setCompanyId(binding.company_id);
   await setCompanyName(binding.company_name ?? "");
