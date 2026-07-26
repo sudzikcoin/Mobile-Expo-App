@@ -13,6 +13,7 @@ import StopCard from "@/components/StopCard";
 import RewardAnimation from "@/components/RewardAnimation";
 import TrackingDiagnostics from "@/components/TrackingDiagnostics";
 import EldStatusPill from "@/components/EldStatusPill";
+import BrokerInviteBanner from "@/components/BrokerInviteBanner";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { isStopCurrent } from "@/lib/mock-data";
 import { buildTruckerPathLoadLink } from "@/lib/truckerpath";
@@ -238,6 +239,7 @@ export default function DashboardScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
+        <BrokerInviteBanner />
         {load ? (
           <>
             <LoadCard

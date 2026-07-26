@@ -435,3 +435,52 @@ export async function markStopDeparture(
     throw error;
   }
 }
+
+// ============================================================================
+// Broker invitations (multi-broker driver identity).
+// A load from a broker the driver has no ACTIVE link with shows up here as a
+// PENDING invitation; nothing of that broker's loads is visible until the
+// driver accepts.
+// ============================================================================
+
+export interface BrokerInvitation {
+  id: string;
+  brokerName: string;
+  loadNumber: string | null;
+  createdAt: string;
+}
+
+export async function fetchBrokerInvitations(
+  truckToken: string,
+): Promise<BrokerInvitation[]> {
+  const baseUrl = getProductionApiUrl();
+  try {
+    const r = await fetch(`${baseUrl}/api/truck/${truckToken}/invitations`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!r.ok) return [];
+    const body = (await r.json()) as { invitations?: BrokerInvitation[] };
+    return body.invitations ?? [];
+  } catch (e) {
+    console.warn("[API] fetchBrokerInvitations error:", e);
+    return [];
+  }
+}
+
+export async function respondBrokerInvitation(
+  truckToken: string,
+  invitationId: string,
+  action: "accept" | "decline",
+): Promise<boolean> {
+  const baseUrl = getProductionApiUrl();
+  try {
+    const r = await fetch(
+      `${baseUrl}/api/truck/${truckToken}/invitations/${invitationId}/${action}`,
+      { method: "POST", headers: { Accept: "application/json" } },
+    );
+    return r.ok;
+  } catch (e) {
+    console.warn("[API] respondBrokerInvitation error:", e);
+    return false;
+  }
+}
