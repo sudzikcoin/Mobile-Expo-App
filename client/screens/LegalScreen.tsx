@@ -1,8 +1,8 @@
 import React from "react";
 import { View, StyleSheet, ActivityIndicator } from "react-native";
-import { WebView } from "react-native-webview";
 import { useRoute, RouteProp } from "@react-navigation/native";
 
+import ResilientWebView from "@/components/ResilientWebView";
 import ScreenHeader from "@/components/ScreenHeader";
 import { PingPointColors } from "@/constants/theme";
 import { useAppTheme } from "@/lib/theme-context";
@@ -24,7 +24,7 @@ export default function LegalScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScreenHeader title={title} />
-      <WebView
+      <ResilientWebView
         source={{ uri: url }}
         style={styles.webview}
         startInLoadingState

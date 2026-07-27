@@ -1,7 +1,8 @@
 import React, { useCallback } from "react";
 import { View, StyleSheet, ActivityIndicator, Linking } from "react-native";
-import { WebView, WebViewNavigation } from "react-native-webview";
+import { WebViewNavigation } from "react-native-webview";
 
+import ResilientWebView from "@/components/ResilientWebView";
 import ScreenHeader from "@/components/ScreenHeader";
 import { PingPointColors } from "@/constants/theme";
 import { useAppTheme } from "@/lib/theme-context";
@@ -44,7 +45,10 @@ export default function NavScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScreenHeader title="PingPoint NAV" />
-      <WebView
+      {/* ResilientWebView: same iOS blank-after-detach recovery as Status.
+          The probe only reloads a DEAD page, so NAV's in-page state (parsed
+          RC, built route) survives normal away-and-back navigation. */}
+      <ResilientWebView
         source={{ uri: NAV_URL }}
         style={styles.webview}
         // Without "*", react-native-webview's JS-side whitelist (default

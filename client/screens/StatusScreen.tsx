@@ -1,8 +1,8 @@
 import React, { useCallback, useState } from "react";
 import { View, StyleSheet, ActivityIndicator } from "react-native";
-import { WebView } from "react-native-webview";
 import { useFocusEffect } from "@react-navigation/native";
 
+import ResilientWebView from "@/components/ResilientWebView";
 import ScreenHeader from "@/components/ScreenHeader";
 import { PingPointColors } from "@/constants/theme";
 import { useAppTheme } from "@/lib/theme-context";
@@ -49,7 +49,12 @@ export default function StatusScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScreenHeader title={t("status.title")} />
       {url ? (
-        <WebView
+        // ResilientWebView, not a bare WebView: iOS kills the page's web
+        // content process while this kept-mounted screen sits detached
+        // behind another one, which used to come back as a dead blank
+        // surface (poll loop stopped, restart required). The wrapper
+        // probes on focus and reloads if the page is gone.
+        <ResilientWebView
           source={{ uri: url }}
           style={styles.webview}
           domStorageEnabled
