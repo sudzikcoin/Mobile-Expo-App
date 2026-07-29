@@ -234,6 +234,137 @@ export async function fetchActiveLoadForTruck(
   }
 }
 
+// ============================================================================
+// Multi-active-load surfaces (server >= 2026-07-29, app >= 1.9.0).
+// A load is ACTIVE from pickup to delivery; several can be active at once
+// (partials/LTL). GPS is server-side attached to ALL active loads — the
+// selection below only decides whose buttons the driver is pressing.
+// ============================================================================
+
+export interface LoadsOverview {
+  active: Load[];
+  waiting: Load[];
+  defaultLoadId: string | null;
+  balance: number;
+}
+
+// Grouped view of the driver's world. Returns null when the endpoint is
+// unavailable (older server) so callers can fall back to single-load mode.
+export async function fetchLoadsOverview(
+  truckToken: string,
+): Promise<LoadsOverview | null> {
+  const baseUrl = getProductionApiUrl();
+  try {
+    const r = await fetch(`${baseUrl}/api/truck/${truckToken}/loads-overview`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!r.ok) return null;
+    const body = (await r.json()) as {
+      active?: APILoadResponse[];
+      waiting?: APILoadResponse[];
+      defaultLoadId?: string | null;
+    };
+    const mapAll = (arr?: APILoadResponse[]) =>
+      (arr ?? []).map((raw) => transformAPIResponse(raw).load);
+    const balance =
+      (body.active ?? []).find((l) => typeof l.rewardBalance === "number")
+        ?.rewardBalance ?? 0;
+    return {
+      active: mapAll(body.active),
+      waiting: mapAll(body.waiting),
+      defaultLoadId: body.defaultLoadId ?? null,
+      balance,
+    };
+  } catch (e) {
+    console.warn("[API] fetchLoadsOverview error:", e);
+    return null;
+  }
+}
+
+// One specific load of the bound driver — used when the driver switches the
+// selected load on the main screen.
+export async function fetchTruckLoadById(
+  truckToken: string,
+  loadId: string,
+): Promise<{ load: Load; balance: number } | null> {
+  const baseUrl = getProductionApiUrl();
+  try {
+    const r = await fetch(`${baseUrl}/api/truck/${truckToken}/loads/${loadId}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!r.ok) return null;
+    const body = (await r.json()) as { load: APILoadResponse | null };
+    if (!body.load) return null;
+    return transformAPIResponse(body.load);
+  } catch (e) {
+    console.warn("[API] fetchTruckLoadById error:", e);
+    return null;
+  }
+}
+
+// Open geofence questions ("Arrived at delivery for load X?") raised while
+// two or more loads are active. Nothing is marked until the driver answers.
+export interface StopConfirmationAlternative {
+  loadId: string;
+  loadNumber: string;
+  stopId: string;
+  stopType: "PICKUP" | "DELIVERY";
+  name: string;
+  city: string;
+  state: string;
+  distanceM: number | null;
+}
+
+export interface StopConfirmation {
+  id: string;
+  action: "ARRIVE" | "DEPART";
+  distanceM: number | null;
+  createdAt: string;
+  load: { id: string; loadNumber: string };
+  stop: { id: string; type: "PICKUP" | "DELIVERY"; name: string; city: string; state: string };
+  alternatives: StopConfirmationAlternative[];
+}
+
+export async function fetchStopConfirmations(
+  truckToken: string,
+): Promise<StopConfirmation[]> {
+  const baseUrl = getProductionApiUrl();
+  try {
+    const r = await fetch(`${baseUrl}/api/truck/${truckToken}/confirmations`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!r.ok) return [];
+    const body = (await r.json()) as { confirmations?: StopConfirmation[] };
+    return body.confirmations ?? [];
+  } catch (e) {
+    console.warn("[API] fetchStopConfirmations error:", e);
+    return [];
+  }
+}
+
+export async function respondStopConfirmation(
+  truckToken: string,
+  confirmationId: string,
+  action: "confirm" | "dismiss",
+  stopId?: string,
+): Promise<boolean> {
+  const baseUrl = getProductionApiUrl();
+  try {
+    const r = await fetch(
+      `${baseUrl}/api/truck/${truckToken}/confirmations/${confirmationId}/${action}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(stopId ? { stopId } : {}),
+      },
+    );
+    return r.ok;
+  } catch (e) {
+    console.warn("[API] respondStopConfirmation error:", e);
+    return false;
+  }
+}
+
 export async function sendTruckPing(
   truckToken: string,
   payload: PingPayload,

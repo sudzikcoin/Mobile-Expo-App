@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import * as Linking from "expo-linking";
-import { AppState, Platform } from "react-native";
+import { Alert, AppState, Platform } from "react-native";
 
 import {
   getDriverToken,
@@ -15,6 +15,8 @@ import {
   clearTruckSession,
   isTruckToken,
   maskToken,
+  getSelectedLoadId,
+  setSelectedLoadId as persistSelectedLoadId,
 } from "./storage";
 import {
   bindDriverToken,
@@ -34,8 +36,14 @@ import {
   markStopArrival,
   markStopDeparture,
   fetchActiveLoadForTruck,
+  fetchLoadsOverview,
+  fetchTruckLoadById,
+  fetchStopConfirmations,
+  respondStopConfirmation,
+  StopConfirmation,
 } from "./api";
 import { Load } from "./types";
+import { useI18n } from "./i18n";
 import { notifyStopEvent } from "./notifications";
 import { getIOSiXService } from "./iosix/service";
 import {
@@ -54,6 +62,13 @@ interface DriverContextType {
   isBound: boolean | null;
   error: string | null;
   load: Load | null;
+  // Multi-active-load mode (partials/LTL). activeLoads lists every load the
+  // driver has picked up and not yet delivered; when there are >= 2 the
+  // Dashboard shows the selector strip and `load` is the SELECTED one.
+  // With 0-1 active loads these mirror the legacy single-load behaviour.
+  activeLoads: Load[];
+  waitingLoads: Load[];
+  selectLoad: (loadId: string) => Promise<void>;
   balance: number;
   isLocationEnabled: boolean;
   isLocationLoading: boolean;
@@ -85,11 +100,14 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 }
 
 export function DriverProvider({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
   const [token, setTokenState] = useState<string | null>(null);
   const [isBound, setIsBound] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [load, setLoad] = useState<Load | null>(null);
+  const [activeLoads, setActiveLoads] = useState<Load[]>([]);
+  const [waitingLoads, setWaitingLoads] = useState<Load[]>([]);
   const [balance, setBalance] = useState(0);
   const [isLocationEnabled, setIsLocationEnabled] = useState(false);
   const [isLocationLoading, setIsLocationLoading] = useState(false);
@@ -109,6 +127,15 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadRef.current = load;
   }, [load]);
+
+  // Multi-active state read from async callbacks (geofence/ELD handlers).
+  // With >= 2 active loads the DEVICE must not auto-mark stops either — the
+  // server raises a confirmation and the driver answers it.
+  const activeLoadsRef = useRef<Load[]>([]);
+  useEffect(() => {
+    activeLoadsRef.current = activeLoads;
+  }, [activeLoads]);
+  const selectedLoadIdRef = useRef<string | null>(null);
 
   const parseTokenFromUrl = (url: string): string | null => {
     try {
@@ -238,6 +265,9 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     setTokenState(null);
     setIsBound(false);
     setLoad(null);
+    setActiveLoads([]);
+    setWaitingLoads([]);
+    selectedLoadIdRef.current = null;
     setError(null);
   }, []);
 
@@ -251,6 +281,38 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
     try {
       setError(null);
+
+      if (isTruckToken(token)) {
+        // Grouped view first: it tells us whether the driver is in
+        // multi-active mode. On any failure (older server, network) it
+        // returns null and we fall through to the legacy single-load path.
+        const overview = await fetchLoadsOverview(token);
+        if (overview) {
+          setActiveLoads(overview.active);
+          setWaitingLoads(overview.waiting);
+        }
+
+        if (overview && overview.active.length >= 2) {
+          // The main screen shows the SELECTED active load. Fall back to the
+          // server's three-tier default when the remembered selection is no
+          // longer active (delivered / removed).
+          const selected =
+            (selectedLoadIdRef.current
+              ? overview.active.find((l) => l.id === selectedLoadIdRef.current)
+              : undefined) ??
+            (overview.defaultLoadId
+              ? overview.active.find((l) => l.id === overview.defaultLoadId)
+              : undefined) ??
+            overview.active[0];
+          selectedLoadIdRef.current = selected.id;
+          setLoad(selected);
+          setBalance(overview.balance);
+          return;
+        }
+      }
+
+      // 0-1 active loads (or legacy drv_ token): the shipped single-load
+      // flow, untouched.
       const result = isTruckToken(token)
         ? await fetchActiveLoadForTruck(token)
         : await fetchDriverLoad(token);
@@ -274,6 +336,93 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       setError("Failed to connect to server");
     }
   }, [token]);
+
+  // Switch the selected load (selector strip / Loads screen). Only decides
+  // whose buttons the driver is pressing — GPS is attached to all active
+  // loads server-side regardless of the selection.
+  const selectLoad = useCallback(
+    async (loadId: string) => {
+      selectedLoadIdRef.current = loadId;
+      await persistSelectedLoadId(loadId);
+      const cached = activeLoadsRef.current.find((l) => l.id === loadId);
+      if (cached) setLoad(cached);
+      if (token && isTruckToken(token)) {
+        const fresh = await fetchTruckLoadById(token, loadId);
+        if (fresh) {
+          setLoad(fresh.load);
+          setBalance(fresh.balance);
+        }
+      }
+    },
+    [token],
+  );
+
+  // ---- Geofence confirmations (multi-active mode) ----
+  // The server never marks a stop automatically while >= 2 loads are active;
+  // it queues a question instead. Poll it on the same cadence as the load
+  // and surface a native dialog. One dialog at a time; "Not now" dismisses
+  // server-side (re-asks after an hour at the earliest).
+  const askingConfirmationRef = useRef(false);
+  const presentConfirmation = useCallback(
+    (tk: string, conf: StopConfirmation) => {
+      if (askingConfirmationRef.current) return;
+      askingConfirmationRef.current = true;
+
+      const stopKind =
+        conf.stop.type === "PICKUP" ? t("confirm.pickup") : t("confirm.delivery");
+      const respond = async (action: "confirm" | "dismiss", stopId?: string) => {
+        try {
+          await respondStopConfirmation(tk, conf.id, action, stopId);
+          await refreshLoad();
+        } finally {
+          askingConfirmationRef.current = false;
+        }
+      };
+
+      const buttons: Array<{ text: string; style?: "cancel"; onPress: () => void }> = [
+        {
+          text: t("confirm.yes", { load: conf.load.loadNumber }),
+          onPress: () => void respond("confirm"),
+        },
+      ];
+      const alt = conf.alternatives[0];
+      if (alt) {
+        buttons.push({
+          text: t("confirm.otherLoad", { load: alt.loadNumber }),
+          onPress: () => void respond("confirm", alt.stopId),
+        });
+      }
+      buttons.push({
+        text: t("confirm.notNow"),
+        style: "cancel",
+        onPress: () => void respond("dismiss"),
+      });
+
+      Alert.alert(
+        conf.action === "ARRIVE" ? t("confirm.arriveTitle") : t("confirm.departTitle"),
+        t(conf.action === "ARRIVE" ? "confirm.arriveMsg" : "confirm.departMsg", {
+          kind: stopKind,
+          load: conf.load.loadNumber,
+          place: conf.stop.name || `${conf.stop.city}, ${conf.stop.state}`,
+        }),
+        buttons,
+        { cancelable: false },
+      );
+    },
+    [t, refreshLoad],
+  );
+
+  const pollConfirmations = useCallback(async () => {
+    const tk = tokenRef.current;
+    if (!tk || !isTruckToken(tk)) return;
+    if (askingConfirmationRef.current) return;
+    try {
+      const confs = await fetchStopConfirmations(tk);
+      if (confs.length > 0) presentConfirmation(tk, confs[0]);
+    } catch {
+      // Poll failures are silent; next tick retries.
+    }
+  }, [presentConfirmation]);
 
   const startLocationTracking = useCallback(async () => {
     if (!token || !isTruckToken(token)) {
@@ -417,6 +566,12 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       token,
       stops,
       onArrive: async (stopId) => {
+        // Multi-active mode: never auto-mark from the device — the server
+        // raises a confirmation and the driver answers it explicitly.
+        if (activeLoadsRef.current.length >= 2) {
+          void pollConfirmations();
+          return;
+        }
         try {
           await markStopArrival(token, stopId);
           await addLog({ action: "ARRIVE", stopId, stopName: load.stops.find((x) => x.id === stopId)?.companyName });
@@ -426,6 +581,10 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         }
       },
       onDepart: async (stopId) => {
+        if (activeLoadsRef.current.length >= 2) {
+          void pollConfirmations();
+          return;
+        }
         try {
           await markStopDeparture(token, stopId);
           await addLog({ action: "DEPART", stopId, stopName: load.stops.find((x) => x.id === stopId)?.companyName });
@@ -435,7 +594,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         }
       },
     });
-  }, [token, load, refreshLoad]);
+  }, [token, load, refreshLoad, pollConfirmations]);
 
   // Register the native-geofence arrival/departure handler once. It reads
   // current token/load via refs because it fires from background/terminated.
@@ -444,6 +603,13 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       const tk = tokenRef.current;
       const ld = loadRef.current;
       if (!tk || !ld) return;
+      // Multi-active mode: device-side geofences must not mark stops either.
+      // The server-side detector queues a confirmation from the same ping
+      // stream; nudge the poll so the question appears promptly.
+      if (activeLoadsRef.current.length >= 2) {
+        void pollConfirmations();
+        return;
+      }
       const stop = ld.stops.find((s) => s.id === stopId);
       if (!stop) return;
       try {
@@ -463,7 +629,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       }
     });
     return () => setGeofenceHandler(null);
-  }, [refreshLoad]);
+  }, [refreshLoad, pollConfirmations]);
 
   // Keep native geofences in sync with the active load's stops. Stops without
   // coordinates are skipped inside syncStopGeofences (logged there).
@@ -502,6 +668,8 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         // Truck token (new flow) takes precedence over per-load drv_xxx.
         const savedToken = await getActiveToken();
         const setupComplete = await getTruckSetupComplete();
+        // Remembered load selection (multi-active mode) survives restarts.
+        selectedLoadIdRef.current = await getSelectedLoadId();
         // Variant 1: tracking always on. Force-persist true so reads stay stable.
         await saveLocationEnabled(true);
 
@@ -591,9 +759,10 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     if (!token || token === "undefined" || token === "null") return;
     const interval = setInterval(() => {
       void refreshLoad();
+      void pollConfirmations();
     }, 30000);
     return () => clearInterval(interval);
-  }, [token, refreshLoad]);
+  }, [token, refreshLoad, pollConfirmations]);
 
   // Refresh immediately when the app returns to the foreground: background
   // JS timers don't fire on Android, so without this the driver reopens the
@@ -604,10 +773,11 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       if (next === "active") {
         console.log("[Driver] App foregrounded — refreshing load");
         void refreshLoad();
+        void pollConfirmations();
       }
     });
     return () => sub.remove();
-  }, [token, refreshLoad]);
+  }, [token, refreshLoad, pollConfirmations]);
 
   useEffect(() => {
     if (token && isLocationEnabled) {
@@ -667,6 +837,9 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         isBound,
         error,
         load,
+        activeLoads,
+        waitingLoads,
+        selectLoad,
         balance,
         isLocationEnabled,
         isLocationLoading,

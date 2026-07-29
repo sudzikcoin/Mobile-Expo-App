@@ -55,7 +55,9 @@ const MENU_ITEMS: Array<{
   accent: string;
 }> = [
   { route: "Dashboard", labelKey: "menu.dashboard", icon: "home", accent: PingPointColors.cyan },
-  { route: "History", labelKey: "menu.history", icon: "clock", accent: PingPointColors.yellow },
+  // "History" route hosts the Loads screen since 1.9.0 (Active / Waiting /
+  // Delivered); route name kept to avoid churn in navigation references.
+  { route: "History", labelKey: "menu.loads", icon: "package", accent: PingPointColors.yellow },
   { route: "Status", labelKey: "menu.status", icon: "activity", accent: "#00ff88" },
   { route: "Nav", labelKey: "menu.nav", icon: "truck", accent: PingPointColors.magenta },
   { route: "Settings", labelKey: "menu.settings", icon: "settings", accent: PingPointColors.purple },

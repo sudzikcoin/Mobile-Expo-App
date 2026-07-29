@@ -15,6 +15,7 @@ const KEYS = {
   COMPANY_NAME: "@pingpoint_company_name",
   DRIVER_NAME: "@pingpoint_driver_name",
   TRUCK_SETUP_COMPLETE: "@pingpoint_truck_setup_complete",
+  SELECTED_LOAD_ID: "@pingpoint_selected_load_id",
 };
 
 // Returns the active token, preferring per-truck (new flow) over per-load (legacy).
@@ -299,6 +300,28 @@ export async function setCompanyName(name: string): Promise<void> {
   }
 }
 
+// Which active load the driver last selected on the main screen. Only
+// meaningful while >= 2 loads are active; survives app restarts.
+export async function getSelectedLoadId(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(KEYS.SELECTED_LOAD_ID);
+  } catch {
+    return null;
+  }
+}
+
+export async function setSelectedLoadId(id: string | null): Promise<void> {
+  try {
+    if (id) {
+      await AsyncStorage.setItem(KEYS.SELECTED_LOAD_ID, id);
+    } else {
+      await AsyncStorage.removeItem(KEYS.SELECTED_LOAD_ID);
+    }
+  } catch (error) {
+    console.error("Failed to set selected load id:", error);
+  }
+}
+
 // Wipe everything tied to the current truck/driver session — used by
 // "Switch truck" in Settings to drop the user back at the picker flow.
 export async function clearTruckSession(): Promise<void> {
@@ -313,6 +336,7 @@ export async function clearTruckSession(): Promise<void> {
       KEYS.DRIVER_NAME,
       KEYS.TRUCK_SETUP_COMPLETE,
       KEYS.CURRENT_LOAD,
+      KEYS.SELECTED_LOAD_ID,
     ]);
   } catch (error) {
     console.error("Failed to clear truck session:", error);

@@ -10,6 +10,7 @@ import EmptyState from "@/components/EmptyState";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { Load, Stop } from "@/lib/types";
 import { getCompletedLoads, getActiveToken, isTruckToken } from "@/lib/storage";
+import { useDriver } from "@/lib/driver-context";
 import { useAppTheme } from "@/lib/theme-context";
 import { useI18n } from "@/lib/i18n";
 
@@ -71,7 +72,21 @@ function mapServerLoad(raw: any): HistoryLoad {
   };
 }
 
-function LoadHistoryItem({ load, onPress }: { load: HistoryLoad; onPress: () => void }) {
+function LoadHistoryItem({
+  load,
+  onPress,
+  badge,
+  badgeColor,
+  metaLeft,
+}: {
+  load: HistoryLoad;
+  onPress: () => void;
+  // Section-specific presentation: "IN PROGRESS" (active), "PICKUP <date>"
+  // (waiting) or the default DELIVERED treatment.
+  badge?: string;
+  badgeColor?: string;
+  metaLeft?: string;
+}) {
   const { colors, isArcade } = useAppTheme();
   const { t } = useI18n();
 
@@ -88,6 +103,8 @@ function LoadHistoryItem({ load, onPress }: { load: HistoryLoad; onPress: () => 
     }
     onPress();
   };
+
+  const accent = badgeColor ?? (isArcade ? PingPointColors.cyan : "#ffffff");
 
   return (
     <Pressable
@@ -107,8 +124,8 @@ function LoadHistoryItem({ load, onPress }: { load: HistoryLoad; onPress: () => 
           LOAD #{load.loadNumber}
         </ThemedText>
         <View style={[styles.deliveredBadge, { backgroundColor: isArcade ? "rgba(0, 217, 255, 0.2)" : "rgba(255, 255, 255, 0.1)" }]}>
-          <ThemedText style={[styles.deliveredText, { color: isArcade ? PingPointColors.cyan : "#ffffff" }]}>
-            {t("history.delivered")}
+          <ThemedText style={[styles.deliveredText, { color: accent }]}>
+            {badge ?? t("history.delivered")}
           </ThemedText>
         </View>
       </View>
@@ -125,7 +142,7 @@ function LoadHistoryItem({ load, onPress }: { load: HistoryLoad; onPress: () => 
 
       <View style={styles.metaRow}>
         <ThemedText style={[styles.metaText, { color: colors.textSecondary }]}>
-          {deliveredAt ? t("history.deliveredOn", { date: formatDate(deliveredAt) }) : ""}
+          {metaLeft ?? (deliveredAt ? t("history.deliveredOn", { date: formatDate(deliveredAt) }) : "")}
         </ThemedText>
         <ThemedText style={[styles.metaText, { color: colors.textMuted }]}>
           {t("history.stopsCount", { n: load.stops.length })}
@@ -140,6 +157,10 @@ export default function HistoryScreen() {
   const { colors } = useAppTheme();
   const { t } = useI18n();
   const navigation = useNavigation<any>();
+  // "Loads" screen: Active (picked up, in progress) and Waiting (not yet
+  // picked up, nearest pickup first) come live from the driver context;
+  // Delivered below is the original paginated history list.
+  const { activeLoads, waitingLoads, load: selectedLoad, selectLoad, refreshLoad } = useDriver();
   const [loads, setLoads] = useState<HistoryLoad[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -200,9 +221,68 @@ export default function HistoryScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadHistory();
+    await Promise.all([loadHistory(), refreshLoad()]);
     setRefreshing(false);
-  }, [loadHistory]);
+  }, [loadHistory, refreshLoad]);
+
+  // Opening a load from Active makes it the selected load on the main
+  // screen; Waiting is a read-only detail view.
+  const openActiveLoad = useCallback(
+    (l: Load) => {
+      void selectLoad(l.id);
+      navigation.navigate("Dashboard");
+    },
+    [selectLoad, navigation],
+  );
+
+  const firstPickupDate = (l: Load): string => {
+    const pickup = l.stops.find((s) => s.type === "PICKUP");
+    return pickup?.scheduledTime ? formatDate(pickup.scheduledTime) : "";
+  };
+
+  const sectionsHeader = (
+    <View>
+      {activeLoads.length > 0 ? (
+        <View style={styles.section}>
+          <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>
+            {t("loads.active")}
+          </ThemedText>
+          {activeLoads.map((l) => (
+            <LoadHistoryItem
+              key={l.id}
+              load={l as HistoryLoad}
+              badge={l.id === selectedLoad?.id ? t("loads.selectedBadge") : t("loads.activeBadge")}
+              badgeColor={PingPointColors.cyan}
+              metaLeft={t("loads.tapToDrive")}
+              onPress={() => openActiveLoad(l)}
+            />
+          ))}
+        </View>
+      ) : null}
+      {waitingLoads.length > 0 ? (
+        <View style={styles.section}>
+          <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>
+            {t("loads.waiting")}
+          </ThemedText>
+          {waitingLoads.map((l) => (
+            <LoadHistoryItem
+              key={l.id}
+              load={l as HistoryLoad}
+              badge={t("loads.waitingBadge")}
+              badgeColor={PingPointColors.yellow}
+              metaLeft={firstPickupDate(l) ? t("loads.pickupOn", { date: firstPickupDate(l) }) : ""}
+              onPress={() => navigation.navigate("HistoryDetail", { load: l })}
+            />
+          ))}
+        </View>
+      ) : null}
+      {activeLoads.length > 0 || waitingLoads.length > 0 ? (
+        <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>
+          {t("loads.delivered")}
+        </ThemedText>
+      ) : null}
+    </View>
+  );
 
   const onLoadMore = useCallback(async () => {
     if (loadingMore) return;
@@ -231,16 +311,17 @@ export default function HistoryScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScreenHeader title={t("history.title")} />
+      <ScreenHeader title={t("loads.title")} />
 
       <FlatList
         data={loads}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
+        ListHeaderComponent={sectionsHeader}
         contentContainerStyle={[
           styles.listContent,
           { paddingBottom: insets.bottom + Spacing.xl },
-          loads.length === 0 && styles.emptyListContent,
+          loads.length === 0 && activeLoads.length === 0 && waitingLoads.length === 0 && styles.emptyListContent,
         ]}
         refreshControl={
           <RefreshControl
@@ -252,7 +333,7 @@ export default function HistoryScreen() {
         }
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          !isLoading ? (
+          !isLoading && activeLoads.length === 0 && waitingLoads.length === 0 ? (
             <EmptyState
               image={emptyHistoryImage}
               title={t("history.emptyTitle")}
@@ -291,6 +372,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     gap: Spacing.md,
+  },
+  section: {
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    letterSpacing: 2,
   },
   emptyListContent: {
     flex: 1,

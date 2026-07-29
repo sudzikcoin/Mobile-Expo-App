@@ -12,6 +12,7 @@ import LoadCard from "@/components/LoadCard";
 import StopCard from "@/components/StopCard";
 import RewardAnimation from "@/components/RewardAnimation";
 import TrackingDiagnostics from "@/components/TrackingDiagnostics";
+import LoadSelectorStrip from "@/components/LoadSelectorStrip";
 import EldStatusPill from "@/components/EldStatusPill";
 import BrokerInviteBanner from "@/components/BrokerInviteBanner";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
@@ -240,6 +241,8 @@ export default function DashboardScreen() {
         showsVerticalScrollIndicator={false}
       >
         <BrokerInviteBanner />
+        {/* Renders nothing unless >= 2 loads are active at once. */}
+        <LoadSelectorStrip />
         {load ? (
           <>
             <LoadCard
