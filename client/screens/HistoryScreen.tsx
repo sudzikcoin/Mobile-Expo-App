@@ -6,15 +6,12 @@ import * as Haptics from "expo-haptics";
 
 import { ThemedText } from "@/components/ThemedText";
 import ScreenHeader from "@/components/ScreenHeader";
-import EmptyState from "@/components/EmptyState";
 import { PingPointColors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { Load, Stop } from "@/lib/types";
-import { getCompletedLoads, getActiveToken, isTruckToken } from "@/lib/storage";
+import { getCachedDeliveredLoads, setCachedDeliveredLoads, getActiveToken, isTruckToken } from "@/lib/storage";
 import { useDriver } from "@/lib/driver-context";
 import { useAppTheme } from "@/lib/theme-context";
 import { useI18n } from "@/lib/i18n";
-
-import emptyHistoryImage from "@/assets/images/empty-history.png";
 
 const API_BASE = "https://pingpoint.suverse.io";
 const PAGE_SIZE = 20;
@@ -170,14 +167,26 @@ export default function HistoryScreen() {
   // Fetch one page of history. Truck tokens use the paginated
   // /api/truck/:token/history endpoint; legacy drv_* tokens fall back to
   // the older /api/driver/:token/history (single page, up to 50).
+  //
+  // The 1.9.0 Delivered section sat empty on real devices while the server
+  // returned rows, because this request could come back as something other
+  // than a plain 200: iOS revalidated against the ETag and surfaced a
+  // body-less 304, and the shared rate limiter occasionally answered 429
+  // (both confirmed in the nginx log for the owner's device, Jul 29-30).
+  // Any of those fell through to a local "completed loads" list that no code
+  // ever wrote to — guaranteed empty. So: cache-busted no-store request (a
+  // conditional 304 can no longer happen), and the fallback is now the last
+  // server-confirmed page, written below on every successful fetch.
   const fetchPage = useCallback(async (offset: number): Promise<HistoryLoad[] | null> => {
     const token = await getActiveToken();
     if (!token) return null;
+    const bust = Date.now();
     const url = isTruckToken(token)
-      ? `${API_BASE}/api/truck/${token}/history?limit=${PAGE_SIZE}&offset=${offset}`
-      : `${API_BASE}/api/driver/${token}/history`;
+      ? `${API_BASE}/api/truck/${token}/history?limit=${PAGE_SIZE}&offset=${offset}&_=${bust}`
+      : `${API_BASE}/api/driver/${token}/history?_=${bust}`;
     try {
       const res = await fetch(url, {
+        cache: "no-store",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
       });
       if (!res.ok) {
@@ -199,12 +208,13 @@ export default function HistoryScreen() {
       if (page !== null) {
         setLoads(page);
         setHasMore(page.length === PAGE_SIZE);
+        // Write-through: the next failed refresh shows this instead of blank.
+        void setCachedDeliveredLoads(page as Load[]);
         return;
       }
-      // Server unreachable: fall back to loads completed on this device
-      // (real local records — the mocked demo list is gone in 1.8.6).
-      const completedLoads = await getCompletedLoads();
-      setLoads(completedLoads as HistoryLoad[]);
+      // Server unreachable/limited: show the last server-confirmed page.
+      const cached = await getCachedDeliveredLoads();
+      setLoads(cached as HistoryLoad[]);
       setHasMore(false);
     } catch (error) {
       console.error("Failed to load history:", error);
@@ -240,47 +250,64 @@ export default function HistoryScreen() {
     return pickup?.scheduledTime ? formatDate(pickup.scheduledTime) : "";
   };
 
+  const firstPickupTs = (l: Load): number => {
+    const pickup = l.stops.find((s) => s.type === "PICKUP");
+    const ts = pickup?.scheduledTime ? new Date(pickup.scheduledTime).getTime() : NaN;
+    return Number.isNaN(ts) ? Number.MAX_SAFE_INTEGER : ts;
+  };
+  // Server already orders waiting by nearest pickup; sort again so the
+  // contract holds even for cached/legacy payloads.
+  const waitingSorted = [...waitingLoads].sort((a, b) => firstPickupTs(a) - firstPickupTs(b));
+
+  // In-cab rule: one small placeholder per empty section. An empty section
+  // must never remove itself or its header — hiding ACTIVE/WAITING when empty
+  // is exactly how 1.9.0 collapsed this screen to a single
+  // "No Completed Loads" view.
+  const sectionEmpty = (text: string) => (
+    <View style={[styles.sectionEmpty, { borderColor: colors.border, borderRadius: colors.borderRadius }]}>
+      <ThemedText style={[styles.sectionEmptyText, { color: colors.textMuted }]}>{text}</ThemedText>
+    </View>
+  );
+
   const sectionsHeader = (
     <View>
-      {activeLoads.length > 0 ? (
-        <View style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>
-            {t("loads.active")}
-          </ThemedText>
-          {activeLoads.map((l) => (
-            <LoadHistoryItem
-              key={l.id}
-              load={l as HistoryLoad}
-              badge={l.id === selectedLoad?.id ? t("loads.selectedBadge") : t("loads.activeBadge")}
-              badgeColor={PingPointColors.cyan}
-              metaLeft={t("loads.tapToDrive")}
-              onPress={() => openActiveLoad(l)}
-            />
-          ))}
-        </View>
-      ) : null}
-      {waitingLoads.length > 0 ? (
-        <View style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>
-            {t("loads.waiting")}
-          </ThemedText>
-          {waitingLoads.map((l) => (
-            <LoadHistoryItem
-              key={l.id}
-              load={l as HistoryLoad}
-              badge={t("loads.waitingBadge")}
-              badgeColor={PingPointColors.yellow}
-              metaLeft={firstPickupDate(l) ? t("loads.pickupOn", { date: firstPickupDate(l) }) : ""}
-              onPress={() => navigation.navigate("HistoryDetail", { load: l })}
-            />
-          ))}
-        </View>
-      ) : null}
-      {activeLoads.length > 0 || waitingLoads.length > 0 ? (
+      <View style={styles.section}>
         <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>
-          {t("loads.delivered")}
+          {t("loads.active")}
         </ThemedText>
-      ) : null}
+        {activeLoads.length > 0
+          ? activeLoads.map((l) => (
+              <LoadHistoryItem
+                key={l.id}
+                load={l as HistoryLoad}
+                badge={l.id === selectedLoad?.id ? t("loads.selectedBadge") : t("loads.activeBadge")}
+                badgeColor={PingPointColors.cyan}
+                metaLeft={t("loads.tapToDrive")}
+                onPress={() => openActiveLoad(l)}
+              />
+            ))
+          : sectionEmpty(t("loads.emptyActive"))}
+      </View>
+      <View style={styles.section}>
+        <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>
+          {t("loads.waiting")}
+        </ThemedText>
+        {waitingSorted.length > 0
+          ? waitingSorted.map((l) => (
+              <LoadHistoryItem
+                key={l.id}
+                load={l as HistoryLoad}
+                badge={t("loads.waitingBadge")}
+                badgeColor={PingPointColors.yellow}
+                metaLeft={firstPickupDate(l) ? t("loads.pickupOn", { date: firstPickupDate(l) }) : ""}
+                onPress={() => navigation.navigate("HistoryDetail", { load: l })}
+              />
+            ))
+          : sectionEmpty(t("loads.emptyWaiting"))}
+      </View>
+      <ThemedText style={[styles.sectionTitle, { color: colors.textMuted }]}>
+        {t("loads.delivered")}
+      </ThemedText>
     </View>
   );
 
@@ -321,7 +348,6 @@ export default function HistoryScreen() {
         contentContainerStyle={[
           styles.listContent,
           { paddingBottom: insets.bottom + Spacing.xl },
-          loads.length === 0 && activeLoads.length === 0 && waitingLoads.length === 0 && styles.emptyListContent,
         ]}
         refreshControl={
           <RefreshControl
@@ -333,12 +359,12 @@ export default function HistoryScreen() {
         }
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          !isLoading && activeLoads.length === 0 && waitingLoads.length === 0 ? (
-            <EmptyState
-              image={emptyHistoryImage}
-              title={t("history.emptyTitle")}
-              description={t("history.emptyText")}
-            />
+          !isLoading ? (
+            <View style={[styles.sectionEmpty, { borderColor: colors.border, borderRadius: colors.borderRadius }]}>
+              <ThemedText style={[styles.sectionEmptyText, { color: colors.textMuted }]}>
+                {t("loads.emptyDelivered")}
+              </ThemedText>
+            </View>
           ) : null
         }
         ListFooterComponent={
@@ -382,8 +408,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 2,
   },
-  emptyListContent: {
-    flex: 1,
+  sectionEmpty: {
+    minHeight: 56,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderStyle: "dashed",
+    paddingHorizontal: Spacing.lg,
+  },
+  sectionEmptyText: {
+    fontSize: 15,
   },
   // In-cab standard: card is one big ≥56px tap target with 17px route text.
   loadCard: {

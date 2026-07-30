@@ -113,23 +113,26 @@ export async function setCurrentLoad(load: Load | null): Promise<void> {
   }
 }
 
-export async function getCompletedLoads(): Promise<Load[]> {
+// Last server-confirmed DELIVERED page, written on every successful history
+// fetch. This replaces the old getCompletedLoads()/addCompletedLoad() pair:
+// nothing ever called addCompletedLoad, so that fallback list was empty on
+// every device that ever existed — any fetch hiccup (304, 429, offline)
+// blanked the Delivered section even though the server had the rows.
+export async function getCachedDeliveredLoads(): Promise<Load[]> {
   try {
     const loadsData = await AsyncStorage.getItem(KEYS.COMPLETED_LOADS);
     return loadsData ? JSON.parse(loadsData) : [];
   } catch (error) {
-    console.error("Failed to get completed loads:", error);
+    console.error("Failed to get cached delivered loads:", error);
     return [];
   }
 }
 
-export async function addCompletedLoad(load: Load): Promise<void> {
+export async function setCachedDeliveredLoads(loads: Load[]): Promise<void> {
   try {
-    const completedLoads = await getCompletedLoads();
-    completedLoads.unshift(load);
-    await AsyncStorage.setItem(KEYS.COMPLETED_LOADS, JSON.stringify(completedLoads));
+    await AsyncStorage.setItem(KEYS.COMPLETED_LOADS, JSON.stringify(loads));
   } catch (error) {
-    console.error("Failed to add completed load:", error);
+    console.error("Failed to cache delivered loads:", error);
   }
 }
 
