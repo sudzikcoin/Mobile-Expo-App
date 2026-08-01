@@ -18,6 +18,7 @@ import LoadDetailsScreen from "@/screens/LoadDetailsScreen";
 import TrackingStatusScreen from "@/screens/TrackingStatusScreen";
 import NavScreen from "@/screens/NavScreen";
 import StatusScreen from "@/screens/StatusScreen";
+import IftaScreen from "@/screens/IftaScreen";
 import LegalScreen from "@/screens/LegalScreen";
 import { PingPointColors, Spacing, BorderRadius } from "@/constants/theme";
 import { ThemedText } from "@/components/ThemedText";
@@ -38,6 +39,7 @@ export type DrawerParamList = {
   TrackingStatus: undefined;
   Nav: undefined;
   Status: undefined;
+  Ifta: undefined;
   Legal: { url: string; title: string };
 };
 
@@ -59,6 +61,7 @@ const MENU_ITEMS: Array<{
   // Delivered); route name kept to avoid churn in navigation references.
   { route: "History", labelKey: "menu.loads", icon: "package", accent: PingPointColors.yellow },
   { route: "Status", labelKey: "menu.status", icon: "activity", accent: "#00ff88" },
+  { route: "Ifta", labelKey: "menu.ifta", icon: "percent", accent: "#ffd700" },
   { route: "Nav", labelKey: "menu.nav", icon: "truck", accent: PingPointColors.magenta },
   { route: "Settings", labelKey: "menu.settings", icon: "settings", accent: PingPointColors.purple },
 ];
@@ -201,6 +204,15 @@ export default function DrawerNavigator() {
           // Same as Nav below: the telemetry page lives in a WebView, and a
           // frozen WebView comes back as a black surface on Android when the
           // drawer re-shows the kept-mounted screen. Keep it unfrozen.
+          freezeOnBlur: false,
+        }}
+      />
+      <Drawer.Screen
+        name="Ifta"
+        component={IftaScreen}
+        options={{
+          // WebView screen like Status/Nav: upload + mapping state lives in
+          // the page; freeze would black the surface on drawer re-show.
           freezeOnBlur: false,
         }}
       />

@@ -35,6 +35,7 @@ const en: Dict = {
   "menu.dashboard": "Dashboard",
   "menu.history": "History",
   "menu.status": "Status",
+  "menu.ifta": "IFTA",
   "menu.nav": "PingPoint NAV",
   "menu.settings": "Settings",
 
@@ -130,6 +131,7 @@ const en: Dict = {
 
   // Status screen
   "status.title": "Status",
+  "ifta.title": "IFTA",
 
   // Legal
   "legal.privacy": "Privacy Policy",
@@ -186,6 +188,7 @@ const es: Dict = {
   "menu.dashboard": "Panel",
   "menu.history": "Historial",
   "menu.status": "Estado",
+  "menu.ifta": "IFTA",
   "menu.nav": "PingPoint NAV",
   "menu.settings": "Ajustes",
 
@@ -274,6 +277,7 @@ const es: Dict = {
   "historyDetail.departed": "Salida",
 
   "status.title": "Estado",
+  "ifta.title": "IFTA",
 
   "legal.privacy": "Política de privacidad",
   "legal.terms": "Términos de servicio",
